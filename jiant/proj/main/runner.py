@@ -302,6 +302,19 @@ class MultiDDSRunner(JiantRunner):
                                  for p in g["params"]] if g["shared"] else []
                                 for g in self.optimizer.param_groups]
 
+    def log_sampling_probabilities(self, task_name, global_steps):
+        # (Harsh): It's only for the diagnostic runs to track sample probabilities across steps.
+        # I guess main log would be better place to log this. But I'm sticking with this for now.
+        task_sampler = self.jiant_task_container.task_sampler
+        sampling_probabilities = {task_name: probability for task_name, probability in
+                                  zip(self.task_names, list(task_sampler.task_p().numpy()))}
+
+        sampling_probabilities_logs_file = os.path.join(self.output_dir,
+                                                        "sampling_probabilities_logs.jsonl")
+        with open(sampling_probabilities_logs_file, "a+") as file:
+            state_dict = {"task_name": task_name, "global_steps": global_steps,
+                          "sampling_probabilities": sampling_probabilities}
+            file.write(json.dumps(state_dict)+"\n")
 
     def run_train_step(self, train_dataloader_dict: dict, train_state: TrainState):
         self.jiant_model.train()
@@ -353,6 +366,8 @@ class MultiDDSRunner(JiantRunner):
                 )
                 self.optimizer_scheduler.optimizer.zero_grad()
             self.jiant_task_container.task_sampler.update_sampler(torch.stack(task_grad_sim, dim=0))
+            self.log_sampling_probabilities(task_name, train_state.global_steps)
+
         self.log_writer.write_entry(
             "loss_train",
             {
