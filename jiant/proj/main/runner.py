@@ -291,10 +291,17 @@ class ReptileRunner(JiantRunner):
 
 
 class MultiDDSRunner(JiantRunner):
-    def __init__(self, sampler_update_freq, target_task, **kwarg):
+    def __init__(self, sampler_update_freq, target_task, accumulate_target_grad, **kwarg):
         super().__init__(**kwarg)
         self.sampler_update_freq = sampler_update_freq
         self.target_task = target_task
+        self.accumulate_target_grad = accumulate_target_grad
+
+        if self.accumulate_target_grad:
+            self.target_grad = [[torch.zeros_like(p.data)
+                                 for p in g["params"]] if g["shared"] else []
+                                for g in self.optimizer.param_groups]
+
 
     def run_train_step(self, train_dataloader_dict: dict, train_state: TrainState):
         self.jiant_model.train()
@@ -327,8 +334,13 @@ class MultiDDSRunner(JiantRunner):
                 self.target_task,
                 self.jiant_task_container.task_sampler.task_dict[self.target_task],
             )
-            target_grad = self.optimizer_scheduler.get_shared_grad(copy=True)
+            current_target_grad = self.optimizer_scheduler.get_shared_grad(copy=True)
             self.optimizer_scheduler.optimizer.zero_grad()
+
+            if self.accumulate_target_grad:
+                for p_group_idx, _ in enumerate(self.target_grad):
+                    for p_idx, _ in enumerate(self.target_grad[p_group_idx]):
+                        self.target_grad[p_group_idx][p_idx] += current_target_grad[p_group_idx][p_idx]
 
             task_grad_sim = []
             for task_idx, (task_name, task) in enumerate(
