@@ -1,3 +1,4 @@
+import json
 from typing import Dict
 from dataclasses import dataclass
 import os
@@ -291,11 +292,12 @@ class ReptileRunner(JiantRunner):
 
 
 class MultiDDSRunner(JiantRunner):
-    def __init__(self, sampler_update_freq, target_task, accumulate_target_grad, **kwarg):
+    def __init__(self, sampler_update_freq, target_task, output_dir, accumulate_target_grad, **kwarg):
         super().__init__(**kwarg)
         self.sampler_update_freq = sampler_update_freq
         self.target_task = target_task
         self.accumulate_target_grad = accumulate_target_grad
+        self.output_dir = output_dir
 
         if self.accumulate_target_grad:
             self.target_grad = [[torch.zeros_like(p.data)
@@ -306,8 +308,10 @@ class MultiDDSRunner(JiantRunner):
         # (Harsh): It's only for the diagnostic runs to track sample probabilities across steps.
         # I guess main log would be better place to log this. But I'm sticking with this for now.
         task_sampler = self.jiant_task_container.task_sampler
-        sampling_probabilities = {task_name: probability for task_name, probability in
-                                  zip(self.task_names, list(task_sampler.task_p().numpy()))}
+        task_names = task_sampler.task_names
+        task_probabilities = list(task_sampler.task_p().detach().numpy())
+        sampling_probabilities = {task_name: float(probability) for task_name, probability in
+                                  zip(task_names, task_probabilities)}
 
         sampling_probabilities_logs_file = os.path.join(self.output_dir,
                                                         "sampling_probabilities_logs.jsonl")
@@ -354,6 +358,9 @@ class MultiDDSRunner(JiantRunner):
                 for p_group_idx, _ in enumerate(self.target_grad):
                     for p_idx, _ in enumerate(self.target_grad[p_group_idx]):
                         self.target_grad[p_group_idx][p_idx] += current_target_grad[p_group_idx][p_idx]
+                target_grad = self.target_grad
+            else:
+                target_grad = current_target_grad
 
             task_grad_sim = []
             for task_idx, (task_name, task) in enumerate(

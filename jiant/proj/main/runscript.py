@@ -195,7 +195,8 @@ def setup_runner(
             log_writer=quick_init_out.log_writer,
             sampler_update_freq=args.multidds_samper_update_freq,
             target_task=args.multidds_target_task,
-            accumulate_target_grad=args.accumulate_target_grad
+            accumulate_target_grad=args.accumulate_target_grad,
+            output_dir=args.output_dir
         )
     elif args.runner_type == "grad_sim":
         raise NotImplementedError
