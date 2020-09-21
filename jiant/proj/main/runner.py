@@ -302,7 +302,7 @@ class MultiDDSRunner(JiantRunner):
         if self.accumulate_target_grad:
             self.target_grad = [[torch.zeros_like(p.data)
                                  for p in g["params"]] if g["shared"] else []
-                                for g in self.optimizer.param_groups]
+                                for g in self.optimizer_scheduler.optimizer.param_groups]
 
     def log_sampling_probabilities(self, task_name, global_steps, rewards):
         # (Harsh): It's only for the diagnostic runs to track sample probabilities across steps.
