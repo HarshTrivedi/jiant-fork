@@ -309,7 +309,7 @@ class MultiDDSRunner(JiantRunner):
         # I guess main log would be better place to log this. But I'm sticking with this for now.
         task_sampler = self.jiant_task_container.task_sampler
         task_names = task_sampler.task_names
-        task_probabilities = list(task_sampler.task_p().detach().numpy())
+        task_probabilities = list(task_sampler.task_p().detach().cpu().numpy())
         rewards = list(rewards.detach().numpy())
         sampling_probabilities = {task_name: float(probability) for task_name, probability in
                                   zip(task_names, task_probabilities)}
