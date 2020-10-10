@@ -102,11 +102,11 @@ class MultiDDSSampler(BaseMultiTaskSampler):
     ):
         super().__init__(task_dict=task_dict, rng=rng)
         with torch.no_grad():
-            raw_n = torch.FloatTensor([task_to_num_examples_dict[k] for k in self.task_dict],)
+            # start from uniform distribution
+            initial_weight = torch.FloatTensor([1.0 for k in self.task_dict])
             if torch.cuda.is_available():
-                raw_n = raw_n.cuda()
-            log_n = torch.log(raw_n) - torch.mean(torch.log(raw_n))
-            self.sampler_weight = log_n.detach()
+                initial_weight = initial_weight.cuda()
+            self.sampler_weight = initial_weight.detach()
             self.sampler_weight.requires_grad = True
         self.sampler_optimizer = torch.optim.Adam([self.sampler_weight], sampler_lr)
         self.sampler_update_steps = sampler_update_steps
