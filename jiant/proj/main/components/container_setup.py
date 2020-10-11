@@ -320,7 +320,7 @@ def create_jiant_task_container_from_args(args) -> JiantTaskContainer:
             cache_path=os.path.expandvars(task_cache_config_dict[task_name]["train"]),
         )
         num_examples_dict[task_name] = num_examples
-        max_steps += args.epochs * math.ceil(num_examples / args.effective_batch_size)
+        max_steps += (args.epochs or 3) * math.ceil(num_examples / args.effective_batch_size)
         task_specific_configs_dict[task_name] = {
             "train_batch_size": batch_size,
             "eval_batch_size": batch_size * args.eval_batch_multiplier,
