@@ -4,7 +4,7 @@ import numpy as np
 import torch.nn as nn
 import torch
 
-from typing import Union, Optional, Dict
+from typing import Union, Optional, Dict, List
 
 
 class BaseMultiTaskSampler(metaclass=abc.ABCMeta):
@@ -99,20 +99,26 @@ class MultiDDSSampler(BaseMultiTaskSampler):
         task_to_num_examples_dict: dict,
         sampler_lr: float,
         sampler_update_steps: int,
+        sampler_force_skip_tasks: List
     ):
         super().__init__(task_dict=task_dict, rng=rng)
         with torch.no_grad():
             # start from uniform distribution
             initial_weight = torch.FloatTensor([1.0 for k in self.task_dict])
+            self.skip_tasks_mask = torch.BoolTensor([task_name in sampler_force_skip_tasks
+                                                     for task_name in self.task_dict])
             if torch.cuda.is_available():
                 initial_weight = initial_weight.cuda()
+                self.skip_tasks_mask = self.skip_tasks_mask.cuda()
             self.sampler_weight = initial_weight.detach()
             self.sampler_weight.requires_grad = True
         self.sampler_optimizer = torch.optim.Adam([self.sampler_weight], sampler_lr)
         self.sampler_update_steps = sampler_update_steps
+
         self.task_names = list(task_dict.keys())
 
     def task_p(self):
+        self.sampler_weight = self.sampler_weight.masked_fill(self.skip_tasks_mask, -float("Inf"))
         return torch.softmax(self.sampler_weight, dim=0)
 
     def pop(self):
@@ -243,13 +249,14 @@ def create_task_sampler(
             max_steps=sampler_config["max_steps"],
         )
     elif sampler_type == "multidds_sampler":
-        assert len(sampler_config) == 3
+        assert len(sampler_config) == 4
         return MultiDDSSampler(
             task_dict=task_dict,
             rng=rng,
             task_to_num_examples_dict=task_to_num_examples_dict,
             sampler_lr=sampler_config["sampler_lr"],
             sampler_update_steps=sampler_config["sampler_update_steps"],
+            sampler_force_skip_tasks=sampler_config["sampler_force_skip_tasks"]
         )
     else:
         raise KeyError(sampler_type)

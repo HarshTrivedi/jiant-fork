@@ -99,6 +99,7 @@ class RunConfiguration(zconf.RunConfig):
     grad_sim_metric = zconf.attr(default="cos", type=str)
     grad_sim_nonlinear = zconf.attr(default="")
     accumulate_target_grad = zconf.attr(action="store_true")
+    multidds_force_skip_tasks = zconf.attr(default="", type=str)
 
 
 @zconf.run_config
