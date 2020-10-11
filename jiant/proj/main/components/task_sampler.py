@@ -110,6 +110,7 @@ class MultiDDSSampler(BaseMultiTaskSampler):
             if torch.cuda.is_available():
                 initial_weight = initial_weight.cuda()
                 self.skip_tasks_mask = self.skip_tasks_mask.cuda()
+            initial_weight = initial_weight.masked_fill(self.skip_tasks_mask, -float("Inf"))
             self.sampler_weight = initial_weight.detach()
             self.sampler_weight.requires_grad = True
         self.sampler_optimizer = torch.optim.Adam([self.sampler_weight], sampler_lr)
@@ -118,7 +119,6 @@ class MultiDDSSampler(BaseMultiTaskSampler):
         self.task_names = list(task_dict.keys())
 
     def task_p(self):
-        self.sampler_weight = self.sampler_weight.masked_fill(self.skip_tasks_mask, -float("Inf"))
         return torch.softmax(self.sampler_weight, dim=0)
 
     def pop(self):
