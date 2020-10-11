@@ -382,6 +382,7 @@ def create_jiant_task_container_from_args(args) -> JiantTaskContainer:
             "sampler_type": args.sampler_type,
             "sampler_lr": args.multidds_sampler_lr,
             "sampler_update_steps": args.multidds_sampler_update_steps,
+            "sampler_force_skip_tasks": args.multidds_force_skip_tasks
         }
     else:
         raise KeyError(args.sampler_type)
