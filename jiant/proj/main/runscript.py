@@ -100,6 +100,10 @@ class RunConfiguration(zconf.RunConfig):
     grad_sim_nonlinear = zconf.attr(default="")
     accumulate_target_grad = zconf.attr(action="store_true")
     multidds_force_skip_tasks = zconf.attr(default="", type=str)
+    dds_target_task = zconf.attr(default="", type=str)
+    dds_update_freq = zconf.attr(default=10, type=int)
+    dds_update_steps = zconf.attr(default=10, type=int)
+    dds_lr = zconf.attr(default=1e-5, type=float)
 
 
 @zconf.run_config
