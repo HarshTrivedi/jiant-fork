@@ -180,12 +180,27 @@ class TokenClassificationModel(Taskmodel):
         encoder_output = get_output_from_encoder_and_batch(encoder=self.encoder, batch=batch)
         logits = self.token_classification_head(unpooled=encoder_output.unpooled)
         if compute_loss:
-            reduction = 'none' if unreduced_loss else 'mean'
-            loss_fct = nn.CrossEntropyLoss(reduction=reduction)
-            active_loss = batch.label_mask.view(-1) == 1
-            active_logits = logits.view(-1, self.token_classification_head.num_labels)[active_loss]
-            active_labels = batch.label_ids.view(-1)[active_loss]
-            loss = loss_fct(active_logits, active_labels)
+
+            if unreduced_loss:
+                loss_fct = nn.CrossEntropyLoss(reduction='none')
+                try:
+                    batch.label_ids[~batch.label_mask] = -100
+                except:
+                    breakpoint()
+                batch.label_ids[batch.label_ids == -1] = -100
+                loss = loss_fct(logits.view((-1, self.token_classification_head.num_labels)),
+                                batch.label_ids.view(-1))
+                loss = loss.view(len(batch), -1).sum(dim=-1)
+                counts = (batch.label_ids != -100).sum(dim=-1)
+                division = loss / counts
+                loss[counts!=0] = division[counts!=0]
+            else:
+                loss_fct = nn.CrossEntropyLoss()
+                active_loss = batch.label_mask.view(-1) == 1
+                active_logits = logits.view(-1, self.token_classification_head.num_labels)[active_loss]
+                active_labels = batch.label_ids.view(-1)[active_loss]
+                loss = loss_fct(active_logits, active_labels)
+
             return LogitsAndLossOutput(logits=logits, loss=loss, other=encoder_output.other)
         else:
             return LogitsOutput(logits=logits, other=encoder_output.other)

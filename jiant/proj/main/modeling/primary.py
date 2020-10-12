@@ -5,9 +5,11 @@ import torch.nn as nn
 
 import jiant.proj.main.modeling.taskmodels as taskmodels
 import jiant.tasks as tasks
+import jiant.proj.main.modeling.heads as heads
 from jiant.proj.main.components.outputs import construct_output_from_dict
 import jiant.shared.task_aware_unit as tau
 import jiant.proj.main.modeling.modules as jiantmodules
+from jiant.proj.main.components.outputs import LogitsOutput, LogitsAndLossOutput
 
 
 class JiantModel(nn.Module):
@@ -32,7 +34,11 @@ class JiantModel(nn.Module):
             self.saved_weights = copy.deepcopy(list(self.encoder.encoder.parameters()))
         self.model_taus = tau.create_tau_dict(list(self.named_modules()))
 
-    def forward(self, batch: tasks.BatchMixin, task: tasks.Task, compute_loss: bool = False):
+    def forward(self,
+                batch: tasks.BatchMixin,
+                task: tasks.Task,
+                compute_loss: bool = False,
+                unreduced_loss: bool = False):
         """Calls to this forward method are delegated to the forward of the appropriate taskmodel.
 
         When JiantModel forward is called, the task name from the task argument is used as a key
@@ -59,7 +65,8 @@ class JiantModel(nn.Module):
         taskmodel = self.taskmodels_dict[taskmodel_key]
         tau.set_tau_task(self.model_taus, task_name)
         outputs = taskmodel(
-            batch=batch, task=task, tokenizer=self.tokenizer, compute_loss=compute_loss,
+            batch=batch, task=task, tokenizer=self.tokenizer,
+            compute_loss=compute_loss, unreduced_loss=unreduced_loss
         ).to_dict()
         if compute_loss and self.compute_weight_regularization() is not None:
             outputs["loss"] = outputs["loss"] + self.compute_weight_regularization()
@@ -166,6 +173,7 @@ def wrap_jiant_forward(
     batch: tasks.BatchMixin,
     task: tasks.Task,
     compute_loss: bool = False,
+    unreduced_loss: bool = False
 ):
     """Wrapper to repackage model inputs using dictionaries for compatibility with DataParallel.
 
@@ -187,7 +195,10 @@ def wrap_jiant_forward(
     is_multi_gpu = isinstance(jiant_model, nn.DataParallel)
     model_output = construct_output_from_dict(
         jiant_model(
-            batch=batch.to_dict() if is_multi_gpu else batch, task=task, compute_loss=compute_loss,
+            batch=batch.to_dict() if is_multi_gpu else batch,
+            task=task,
+            compute_loss=compute_loss,
+            unreduced_loss=unreduced_loss
         )
     )
     if is_multi_gpu:

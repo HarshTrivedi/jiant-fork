@@ -223,7 +223,7 @@ def create_optimizer_from_params(
 
     if args.runner_type in ["default", "distill"]:
         optimizer_scheduler = OptimizerScheduler(optimizer=optimizer, scheduler=scheduler)
-    elif args.runner_type in ["multidds", "grad_sim"]:
+    elif args.runner_type in ["multidds", "dds", "grad_sim"]:
         optimizer_scheduler = OptimizerSchedulerWithGradOps(
             optimizer=optimizer,
             scheduler=scheduler,
