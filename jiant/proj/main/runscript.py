@@ -199,6 +199,21 @@ def setup_runner(
             accumulate_target_grad=args.accumulate_target_grad,
             output_dir=args.output_dir
         )
+    elif args.runner_type == "dds":
+        runner = jiant_runner.DDSRunner(
+            jiant_task_container=jiant_task_container,
+            jiant_model=jiant_model,
+            optimizer_scheduler=optimizer_scheduler,
+            device=quick_init_out.device,
+            rparams=rparams,
+            log_writer=quick_init_out.log_writer,
+            target_task=args.dds_target_task,
+            dds_update_freq=args.dds_update_freq,
+            dds_update_steps=args.dds_update_steps,
+            dds_lr=args.dds_lr,
+            output_dir=args.output_dir
+        )
+
     elif args.runner_type == "grad_sim":
         raise NotImplementedError
     elif args.runner_type == "distill":

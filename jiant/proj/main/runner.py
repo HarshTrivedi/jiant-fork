@@ -291,6 +291,165 @@ class ReptileRunner(JiantRunner):
         )
 
 
+class DDSOptimizer:
+    def __init__(
+        self,
+        model: nn.Module,
+        lr: float
+    ):
+        self.model = model.dds_weighting_model
+        # TODO: Change it to proper AdamW with proper default lr, steps, decay etc.
+        self.optimizer = torch.optim.Adam([self.model.parameters], lr)
+
+    def step(self, batch: tasks.BatchMixin, rewards: torch.FloatTensor):
+        rl_loss = self.model.dds_weights_forward(batch, rewards, compute_loss=True).loss
+        rl_loss.backward()
+        self.optimizer.step()
+        self.optimizer.zero_grad()
+
+
+class DDSRunner(JiantRunner):
+
+    def __init__(self,
+                 jiant_model,
+                 dds_update_freq,
+                 dds_update_steps,
+                 dds_lr,
+                 target_task,
+                 output_dir,
+                 **kwarg):
+
+        super().__init__(**kwarg)
+        self.dds_update_freq = dds_update_freq
+        self.target_task = target_task
+        self.output_dir = output_dir
+        self.jiant_model = jiant_model
+
+        self.dds_update_steps = dds_update_steps
+        self.dds_optimizer = DDSOptimizer(model=jiant_model, lr=dds_lr)
+
+    def log_dds_details(self, task_name, global_steps, example_ids, dds_weights):
+        sampling_probabilities_logs_file = os.path.join(self.output_dir,
+                                                        "sampling_probabilities_logs.jsonl")
+        with open(sampling_probabilities_logs_file, "a+") as file:
+            state_dict = {"task_name": task_name, "global_steps": global_steps,
+                          "example_ids": example_ids,
+                          "dds_weights": dds_weights,
+                          "dds_rewards": dds_rewards}
+            file.write(json.dumps(state_dict)+"\n")
+
+    def aproximate_vector_grad_dotproduct(
+            self,
+            batch: tasks.BatchMixin,
+            task: tasks.Task,
+            vector: Dict,
+            eps: float = 1e-7
+        ):
+        """
+        See equation 7 of DDS paper: https://arxiv.org/pdf/1911.10088.pdf
+        """
+        # Reminder(Harsh): If I use fp16, eps will have to be changed.
+
+        # TODO: Make sure to do this for the parameters of the shared grads only.
+        instance_losses = self.forward(batch, task, unreduced_loss=True).loss
+
+        # Take a very small step in the direction of vector
+        for p_group_idx, _ in enumerate(vector):
+            for p_idx, _ in enumerate(vector[p_group_idx]):
+                self.optimizer.param_groups[p_group_idx][p_idx] += (eps*vector[p_group_idx][p_idx])
+
+        eps_instance_losses = self.forward(batch, task, unreduced_loss=True).loss
+
+        # TODO: Make sure there's no numerical instability here.
+        vector_grad_dotproducts = (eps_instance_losses - instance_losses)/eps
+
+        # Reset the small step back
+        for p_group_idx, _ in enumerate(vector):
+            for p_idx, _ in enumerate(vector[p_group_idx]):
+                self.optimizer.param_groups[p_group_idx][p_idx] -= (eps*vector[p_group_idx][p_idx])
+
+        return vector_grad_dotproducts
+
+    def run_train_step(self, train_dataloader_dict: dict, train_state: TrainState):
+        self.jiant_model.train()
+
+        task_name, task = self.jiant_task_container.task_sampler.pop()
+        task_specific_config = self.jiant_task_container.task_specific_configs[task_name]
+
+        def run_one_batch(task_name, task, is_target_task):
+
+            task_specific_config = self.jiant_task_container.task_specific_configs[task_name]
+            gradient_accumulation_steps = (1 if is_target_task
+                                           else task_specific_config.gradient_accumulation_steps)
+
+            loss_val = 0
+            example_ids = []
+            dds_weights = []
+            for _ in range(gradient_accumulation_steps):
+                batch, batch_metadata = train_dataloader_dict[task_name].pop()
+                batch = batch.to(self.device)
+                model_output = wrap_jiant_forward(
+                    jiant_model=self.jiant_model, batch=batch, task=task, compute_loss=True, unreduced_loss=True
+                )
+
+                if not is_target_task:
+                    with torch.no_grad():
+                        self.dds_weighting_model.training = False
+                        weights = self.jiant_model.dds_weights_forward(batch).logits.sigmoid()
+                    dds_weights.extend(list(weights.clone.cpu().numpy()))
+                else:
+                    weights = 1.0
+                    dds_weights.extend([1]*len(batch))
+
+                loss = (weights * model_output.loss).mean()
+
+                loss = self.complex_backpropagate(
+                    loss=loss,
+                    gradient_accumulation_steps=gradient_accumulation_steps,
+                )
+                loss_val += loss.item()
+
+                example_ids.extend(batch_metadata["example_id"])
+
+            # TODO: Try to collate batch and
+            # then remove forcing of grad_accum to 1 when is_target_task is True.
+            return batch, example_ids, dds_weights, loss_val
+
+        _, example_ids, dds_weights, loss_val = run_one_batch(task_name, task, is_target_task=False)
+        self.optimizer_scheduler.step()
+        self.optimizer_scheduler.optimizer.zero_grad()
+
+        train_state.step(task_name=task_name)
+        if train_state.global_steps % self.dds_update_freq == 0:
+
+            for step in range(self.dds_update_steps):
+                batch, batch_metadata _ = run_one_batch(
+                    self.target_task,
+                    self.jiant_task_container.task_sampler.task_dict[self.target_task],
+                    is_target_task=True
+                )
+                target_grad = self.optimizer_scheduler.get_shared_grad(copy=True)
+                self.optimizer_scheduler.optimizer.zero_grad()
+
+                rewards = aproximate_vector_grad_dotproduct(
+                    batch=batch,
+                    task=task_name,
+                    vector=target_grad
+                )
+                dds_optimizer.step(batch, rewards)
+
+        self.log_dds_details(task_name, train_state.global_steps, example_ids, dds_weights)
+        self.log_writer.write_entry(
+            "loss_train",
+            {
+                "task": task_name,
+                "task_step": train_state.task_steps[task_name],
+                "global_step": train_state.global_steps,
+                "loss_val": loss_val / task_specific_config.gradient_accumulation_steps,
+            },
+        )
+
+
 class MultiDDSRunner(JiantRunner):
     def __init__(self, sampler_update_freq, target_task, output_dir, accumulate_target_grad, **kwarg):
         super().__init__(**kwarg)

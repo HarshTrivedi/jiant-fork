@@ -76,6 +76,36 @@ class JiantModel(nn.Module):
             return None
 
 
+class JiantModelWithDDSModel(JiantModel):
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        encoder = copy.deepcopy(kwargs["encoder"])
+        regression_head = heads.RegressionHead(
+            hidden_size=encoder.config.hidden_size,
+            hidden_dropout_prob=encoder.config.hidden_dropout_prob,
+        )
+        self.dds_weighting_model = taskmodels.RegressionModel(
+            encoder=encoder,
+            regression_head=regression_head
+        )
+
+    def dds_weights_forward(
+            self,
+            batch: tasks.BatchMixin,
+            rewards: torch.Tensor = None,
+            compute_loss: bool = False
+        ):
+        dds_weight_logits = self.dds_weighting_model(
+            batch=batch, task=None, tokenizer=None
+        ).logits.view(-1)
+        dds_weights = dds_weight_logits.sigmoid()
+
+        if not compute_loss:
+            return LogitsOutput(logits=dds_weight_logits)
+        dds_loss = -(rewards*dds_weights).sum()
+        return LogitsAndLossOutput(logits=dds_weight_logits, loss=dds_loss)
+
+
 class JiantModelWithAdapterFusion(JiantModel):
     def __init__(self, attention_fusion, freeze_transformer=False, freeze_adapters=False, **kwargs):
         super().__init__(**kwargs)
