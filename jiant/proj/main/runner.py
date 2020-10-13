@@ -303,7 +303,7 @@ class DDSOptimizer:
         self.optimizer = torch.optim.Adam(self.model.parameters(), lr)
 
     def step(self, batch: tasks.BatchMixin, rewards: torch.FloatTensor):
-        self.dds_weighting_model.train()
+        self.model.dds_weighting_model.train()
         assert not rewards.requires_grad # Temporary check.
 
         rl_loss = self.model.dds_weights_forward(batch, rewards, compute_loss=True).loss
@@ -331,7 +331,7 @@ class DDSRunner(JiantRunner):
 
     def log_dds_details(self, task_name, global_steps, example_ids, dds_weights):
         dds_details_logs_file = os.path.join(self.output_dir, "dds_details_logs.jsonl")
-        with open(sampling_probabilities_logs_file, "a+") as file:
+        with open(dds_details_logs_file, "a+") as file:
             state_dict = {"task_name": task_name, "global_steps": global_steps,
                           "example_ids": example_ids,
                           "dds_weights": dds_weights}

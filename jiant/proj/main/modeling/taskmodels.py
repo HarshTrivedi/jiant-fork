@@ -183,10 +183,7 @@ class TokenClassificationModel(Taskmodel):
 
             if unreduced_loss:
                 loss_fct = nn.CrossEntropyLoss(reduction='none')
-                try:
-                    batch.label_ids[~batch.label_mask] = -100
-                except:
-                    breakpoint()
+                batch.label_ids[~batch.label_mask] = -100
                 batch.label_ids[batch.label_ids == -1] = -100
                 loss = loss_fct(logits.view((-1, self.token_classification_head.num_labels)),
                                 batch.label_ids.view(-1))
@@ -219,6 +216,7 @@ class QAModel(Taskmodel):
                 logits=logits,
                 start_positions=batch.start_position,
                 end_positions=batch.end_position,
+                unreduced_loss=unreduced_loss
             )
             return LogitsAndLossOutput(logits=logits, loss=loss, other=encoder_output.other)
         else:
