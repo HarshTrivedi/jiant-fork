@@ -82,17 +82,18 @@ class OptimizerSchedulerWithGradOps(OptimizerScheduler):
                 grad_a = [[p**2 for p in g] for g in grad_a]
                 grad_b = [[p**2 for p in g] for g in grad_b]
 
-            if self.grad_sim_metric in ["cos", "fisher_cos"]:
+            if self.grad_sim_metric in ["cos", "fisher_cos", "dot_product"]:
                 norm_a = torch.sqrt(sum([torch.sum(p * p) for g in grad_a for p in g]))
                 norm_b = torch.sqrt(sum([torch.sum(p * p) for g in grad_b for p in g]))
-                a_dot_b = sum(
+                grad_sim = sum(
                     [
                         torch.sum(p_a * p_b)
                         for g_a, g_b in zip(grad_a, grad_b)
                         for p_a, p_b in zip(g_a, g_b)
                     ]
                 )
-                grad_sim = a_dot_b / norm_a / norm_b
+                if self.grad_sim_metric != "dot_product":
+                    grad_sim = grad_sim / norm_a / norm_b
             else:
                 raise KeyError(self.grad_sim_metric)
         else:
