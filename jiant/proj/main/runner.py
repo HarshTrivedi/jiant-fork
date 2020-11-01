@@ -329,11 +329,12 @@ class DDSRunner(JiantRunner):
         self.dds_update_steps = dds_update_steps
         self.dds_optimizer = DDSOptimizer(model=self.jiant_model, lr=dds_lr)
 
-    def log_dds_details(self, task_name, global_steps, example_ids, dds_weights):
+    def log_dds_details(self, task_name, global_steps, example_ids, rewards, dds_weights):
         dds_details_logs_file = os.path.join(self.output_dir, "dds_details_logs.jsonl")
         with open(dds_details_logs_file, "a+") as file:
             state_dict = {"task_name": task_name, "global_steps": global_steps,
                           "example_ids": example_ids,
+                          "rewards": rewards,
                           "dds_weights": dds_weights}
             file.write(json.dumps(state_dict)+"\n")
 
@@ -457,6 +458,12 @@ class DDSRunner(JiantRunner):
             train_dataloader_dict,
             task_name, task, is_target_task=False
         )
+
+        # Make sure the accumulation is turned off
+        assert batch.to_dict()['input_ids'].shape[0] == len(example_ids)
+        batch_size = len(example_ids)
+
+        source_grad = self.optimizer_scheduler.get_shared_grad(copy=True)
         self.optimizer_scheduler.step()
         self.optimizer_scheduler.optimizer.zero_grad()
 
@@ -473,14 +480,21 @@ class DDSRunner(JiantRunner):
                 target_grad = self.optimizer_scheduler.get_shared_grad(copy=True)
                 self.optimizer_scheduler.optimizer.zero_grad()
 
-                rewards = self.aproximate_vector_grad_dotproduct(
-                    batch=batch,
-                    task=task_name,
-                    vector=target_grad
-                )
+                # Following 3 lines are only for batch-level diagnostic.
+                self.optimizer_scheduler.grad_sim_metric = "dot_product"
+                reward = self.optimizer_scheduler.grad_sim(source_grad, target_grad)
+                rewards = reward*torch.ones(batch_size, device=reward.device)
+
+                # rewards = self.aproximate_vector_grad_dotproduct(
+                #     batch=batch,
+                #     task=task_name,
+                #     vector=target_grad
+                # )
+
                 self.dds_optimizer.step(batch, rewards)
 
-        self.log_dds_details(task_name, train_state.global_steps, example_ids, dds_weights)
+        rewards = [float(e) for e in rewards.cpu().numpy()]
+        self.log_dds_details(task_name, train_state.global_steps, example_ids, rewards, dds_weights)
         self.log_writer.write_entry(
             "loss_train",
             {
