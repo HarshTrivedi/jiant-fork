@@ -337,7 +337,8 @@ class DDSRunner(JiantRunner):
             state_dict = {"task_name": task_name, "global_steps": global_steps,
                           "example_ids": example_ids,
                           "rewards": rewards,
-                          "dds_weights": dds_weights}
+                          "dds_weights": dds_weights,
+                          "rl_loss": rl_loss}
             file.write(json.dumps(state_dict)+"\n")
 
     def aproximate_vector_grad_dotproduct(
