@@ -474,14 +474,17 @@ class DDSRunner(JiantRunner):
         if train_state.global_steps % self.dds_update_freq == 0:
 
             for step in range(self.dds_update_steps):
-                self.run_one_batch(
-                    train_dataloader_dict,
-                    self.target_task,
-                    self.jiant_task_container.task_sampler.task_dict[self.target_task],
-                    is_target_task=True
-                )
-                target_grad = self.optimizer_scheduler.get_shared_grad(copy=True)
-                self.optimizer_scheduler.optimizer.zero_grad()
+                # # Turn off temporarily:
+
+                # self.run_one_batch(
+                #     train_dataloader_dict,
+                #     self.target_task,
+                #     self.jiant_task_container.task_sampler.task_dict[self.target_task],
+                #     is_target_task=True
+                # )
+
+                # target_grad = self.optimizer_scheduler.get_shared_grad(copy=True)
+                # self.optimizer_scheduler.optimizer.zero_grad()
 
                 # rewards = self.aproximate_vector_grad_dotproduct(
                 #     batch=batch,
@@ -489,6 +492,7 @@ class DDSRunner(JiantRunner):
                 #     vector=target_grad
                 # )
 
+                # Very simple diagnostic experiment. Hardcode the rewards.
                 rewards = batch.to_dict()['label_id']
 
                 rl_loss = self.dds_optimizer.step(batch, rewards)
