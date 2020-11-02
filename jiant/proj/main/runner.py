@@ -430,7 +430,8 @@ class DDSRunner(JiantRunner):
                 weights = 1.0
                 dds_weights.extend([1]*len(batch))
 
-            loss = (weights * model_output.loss).mean()
+            # loss = (weights * model_output.loss).mean() # TEMPORARY: (for diagnostic)
+            loss = model_output.loss.mean()
 
             loss = self.complex_backpropagate(
                 loss=loss,

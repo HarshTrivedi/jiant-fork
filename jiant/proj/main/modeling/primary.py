@@ -95,6 +95,7 @@ class JiantModelWithDDSModel(JiantModel):
             encoder=encoder,
             regression_head=regression_head
         )
+        self._mse_loss = nn.MSELoss()
 
     def dds_weights_forward(
             self,
@@ -109,7 +110,10 @@ class JiantModelWithDDSModel(JiantModel):
 
         if not compute_loss:
             return LogitsOutput(logits=dds_weights)
-        dds_loss = -(rewards*dds_weights).sum()
+
+        # dds_loss = -(rewards*dds_weights).sum() # TEMPORARY comment for diagnostic.
+        dds_loss = self._mse_loss(dds_weights, rewards.float()) # Temporary mse loss.
+
         return LogitsAndLossOutput(logits=dds_weights, loss=dds_loss)
 
 
