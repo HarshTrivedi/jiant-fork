@@ -105,12 +105,12 @@ class JiantModelWithDDSModel(JiantModel):
         dds_weight_logits = self.dds_weighting_model(
             batch=batch, task=None, tokenizer=None
         ).logits.view(-1)
-        dds_weights = dds_weight_logits.sigmoid()
+        dds_weights = dds_weight_logits.softmax(dim=-1)
 
         if not compute_loss:
-            return LogitsOutput(logits=dds_weight_logits)
+            return LogitsOutput(logits=dds_weights)
         dds_loss = -(rewards*dds_weights).sum()
-        return LogitsAndLossOutput(logits=dds_weight_logits, loss=dds_loss)
+        return LogitsAndLossOutput(logits=dds_weights, loss=dds_loss)
 
 
 class JiantModelWithAdapterFusion(JiantModel):
