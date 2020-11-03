@@ -1,3 +1,4 @@
+import copy
 import os
 import torch
 
@@ -143,6 +144,10 @@ def setup_runner(
         jiant_model_setup.delegate_load_from_path(
             jiant_model=jiant_model, weights_path=args.model_path, load_mode=args.model_load_mode
         )
+
+        if hasattr(jiant_model, "dds_model"):
+            jiant_model.encoder = copy.deepcopy(jiant_model.dds_model.encoder)
+
         jiant_model.to(quick_init_out.device)
 
     optimizer_scheduler = model_setup.create_optimizer(
