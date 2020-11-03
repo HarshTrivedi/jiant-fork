@@ -95,7 +95,7 @@ class JiantModelWithDDSModel(JiantModel):
         )
         self.dds_model = taskmodels.ClassificationModel(encoder=encoder,
                                                         classification_head=classification_head)
-        self._loss = nn.CrossEntropyLoss()
+        # self._loss = nn.CrossEntropyLoss()
 
         # regression_head = heads.RegressionHead(
         #     hidden_size=encoder.config.hidden_size,
@@ -114,10 +114,14 @@ class JiantModelWithDDSModel(JiantModel):
             compute_loss: bool = False
         ):
 
-        dds_weight_logits = self.dds_model(
-            batch=batch, task=None, tokenizer=None
-        ).logits.view(-1)
-        dds_weights = dds_weight_logits.softmax(dim=-1) # Not useful.
+        return self.dds_model(
+            batch=batch, task=None, tokenizer=None, compute_loss=compute_loss
+        )
+
+        # dds_weight_logits = self.dds_model(
+        #     batch=batch, task=None, tokenizer=None
+        # ).logits.view(-1)
+        # dds_weights = dds_weight_logits.softmax(dim=-1) # Not useful.
 
 
         # dds_weight_logits = self.dds_model(
@@ -125,17 +129,17 @@ class JiantModelWithDDSModel(JiantModel):
         # ).logits.view(-1)
         # dds_weights = dds_weight_logits.softmax(dim=-1)
 
-        if not compute_loss:
-            return LogitsOutput(logits=dds_weights)
+        # if not compute_loss:
+        #     return LogitsOutput(logits=dds_weights)
 
         # dds_loss = -(rewards*dds_weights).sum() # TEMPORARY comment for diagnostic.
         # dds_loss = self._mse_loss(dds_weights, rewards.float()) # Temporary mse loss.
 
-        dds_loss = self._loss(
-            dds_weight_logits.view(-1, 3), batch.label_id.view(-1),
-        )
+        # dds_loss = self._loss(
+        #     dds_weight_logits.view(-1, 3), batch.label_id.view(-1),
+        # )
 
-        return LogitsAndLossOutput(logits=dds_weights, loss=dds_loss)
+        # return LogitsAndLossOutput(logits=dds_weights, loss=dds_loss)
 
 
 class JiantModelWithAdapterFusion(JiantModel):
