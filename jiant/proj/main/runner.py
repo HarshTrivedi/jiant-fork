@@ -1,3 +1,4 @@
+import copy
 import json
 from typing import Dict
 from dataclasses import dataclass
@@ -12,6 +13,7 @@ import jiant.utils.torch_utils as torch_utils
 from jiant.proj.main.components.container_setup import JiantTaskContainer
 from jiant.proj.main.modeling.primary import JiantModel, wrap_jiant_forward
 from jiant.shared.constants import PHASE
+from jiant.shared.model_setup import OptimizerSchedulerWithGradOps
 from jiant.shared.runner import (
     complex_backpropagate,
     get_train_dataloader_from_cache,
@@ -295,12 +297,12 @@ class ReptileRunner(JiantRunner):
 class DDSOptimizer:
     def __init__(
         self,
+        scheduler: OptimizerSchedulerWithGradOps,
         model: nn.Module,
         lr: float
     ):
         self.model = model
-        # TODO: Change it to proper AdamW with proper default lr, steps, decay etc.
-        self.optimizer = torch.optim.Adam(self.model.parameters(), lr)
+        self.scheduler = scheduler
 
     def step(self, batch: tasks.BatchMixin, rewards: torch.FloatTensor):
         self.model.dds_weighting_model.train()
@@ -309,8 +311,8 @@ class DDSOptimizer:
         rl_loss = self.model.dds_weights_forward(batch, rewards, compute_loss=True).loss
         rl_loss.backward()
 
-        self.optimizer.step()
-        self.optimizer.zero_grad()
+        self.scheduler.step()
+        self.scheduler.optimizer.zero_grad()
         return rl_loss
 
 
@@ -329,7 +331,8 @@ class DDSRunner(JiantRunner):
         self.output_dir = output_dir
 
         self.dds_update_steps = dds_update_steps
-        self.dds_optimizer = DDSOptimizer(model=self.jiant_model, lr=dds_lr)
+        self.dds_optimizer = DDSOptimizer(scheduler=copy.deepcopy(self.optimizer_scheduler),
+                                          model=self.jiant_model, lr=dds_lr)
 
     def log_dds_details(self, task_name, global_steps, example_ids, rewards, dds_weights, rl_loss):
         dds_details_logs_file = os.path.join(self.output_dir, "dds_details_logs.jsonl")
