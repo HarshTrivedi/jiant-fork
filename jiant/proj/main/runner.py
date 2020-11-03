@@ -436,6 +436,10 @@ class DDSRunner(JiantRunner):
             if task_name != self.target_task:
                 break
 
+        # check = {key: bool(torch.all(self.jiant_model.encoder.state_dict()[key] == self.jiant_model.dds_model.encoder.state_dict()[key]))
+        #          for key in self.jiant_model.encoder.state_dict().keys()}
+        # breakpoint()
+
         task_specific_config = self.jiant_task_container.task_specific_configs[task_name]
 
         batch, batch_metadata = train_dataloader_dict[task_name].pop()

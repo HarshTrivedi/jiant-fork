@@ -146,7 +146,14 @@ def setup_runner(
         )
 
         if hasattr(jiant_model, "dds_model"):
-            jiant_model.encoder = copy.deepcopy(jiant_model.dds_model.encoder)
+            # jiant_model.encoder = copy.deepcopy(jiant_model.dds_model.encoder)
+            jiant_model.dds_model.encoder.load_state_dict(jiant_model.encoder.state_dict())
+            # jiant_model_setup.delegate_load_from_path(
+            #     jiant_model=jiant_model.dds_model, weights_path=args.model_path, load_mode="from_transformers"
+            # )
+            # check = {key: bool(torch.all(jiant_model.encoder.state_dict()[key] == jiant_model.dds_model.encoder.state_dict()[key]))
+            #          for key in jiant_model.encoder.state_dict().keys()}
+            # breakpoint()
 
         jiant_model.to(quick_init_out.device)
 
