@@ -444,13 +444,13 @@ class DDSRunner(JiantRunner):
 
         ###########
         ###########
-        loss = self.jiant_model.forward(batch=batch, task=task, compute_loss=True).loss
+        loss = self.jiant_model.forward(batch=batch, task=task, compute_loss=True)['loss']
 
         loss = self.complex_backpropagate(
             loss=loss,
             gradient_accumulation_steps=1,
         )
-        loss_val += loss.item()
+        loss_val = loss.item()
 
         self.optimizer_scheduler.step()
         # for debugging.

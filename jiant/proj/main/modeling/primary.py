@@ -94,7 +94,7 @@ class JiantModelWithDDSModel(JiantModel):
             num_labels=3
         )
         self.dds_model = taskmodels.ClassificationModel(encoder=encoder,
-                                                                  classification_head=classification_head)
+                                                        classification_head=classification_head)
         self._loss = nn.CrossEntropyLoss()
 
         # regression_head = heads.RegressionHead(
