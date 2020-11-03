@@ -93,6 +93,9 @@ class JiantModelWithDDSModel(JiantModel):
             hidden_dropout_prob=encoder.config.hidden_dropout_prob,
             num_labels=3
         )
+
+        # NOTE: Do not change attribute dds_model to something else.
+        # If you do, make sure to change it in runscript.py as well (after delegate_load_from_path)
         self.dds_model = taskmodels.ClassificationModel(encoder=encoder,
                                                         classification_head=classification_head)
         # self._loss = nn.CrossEntropyLoss()
