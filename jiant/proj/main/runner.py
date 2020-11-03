@@ -444,37 +444,36 @@ class DDSRunner(JiantRunner):
 
         ###########
         ###########
-        loss = self.jiant_model.forward(batch=batch, task=task, compute_loss=True)['loss']
-
-        loss = self.complex_backpropagate(
-            loss=loss,
-            gradient_accumulation_steps=1,
-        )
-        loss_val = loss.item()
-
-        self.optimizer_scheduler.step()
-        # for debugging.
-        # [(0 if p.grad is None or p.grad.sum().item() == 0 else 1)
-        #  for g in self.optimizer_scheduler.optimizer.param_groups for p in g['params'] if g["shared"]]
-        self.optimizer_scheduler.optimizer.zero_grad()
-        ###########
-        ###########
+        loss_val = 0
+        # loss = self.jiant_model.forward(batch=batch, task=task, compute_loss=True)['loss']
+        # loss = self.complex_backpropagate(
+        #     loss=loss,
+        #     gradient_accumulation_steps=1,
+        # )
+        # loss_val = loss.item()
+        # self.optimizer_scheduler.step()
+        # # for debugging.
+        # # [(0 if p.grad is None or p.grad.sum().item() == 0 else 1)
+        # #  for g in self.optimizer_scheduler.optimizer.param_groups for p in g['params'] if g["shared"]]
+        # self.optimizer_scheduler.optimizer.zero_grad()
+        # ###########
+        # ###########
 
         train_state.step(task_name=task_name)
 
         ###########
         ###########
+        rl_loss_val = 0
         rl_loss = self.jiant_model.dds_weights_forward(
             batch=batch,
             rewards=batch.to_dict()['label_id'],
             compute_loss=True
         ).loss
-
         rl_loss = self.complex_backpropagate(
             loss=rl_loss,
             gradient_accumulation_steps=1,
         )
-        rl_loss_value = rl_loss.item()
+        rl_loss_val = rl_loss.item()
 
         self.optimizer_scheduler.step()
         # for debugging.
@@ -484,7 +483,7 @@ class DDSRunner(JiantRunner):
         ###########
         ###########
 
-        self.log_dds_details(task_name, train_state.global_steps, None, None, None, rl_loss_value, loss_val)
+        self.log_dds_details(task_name, train_state.global_steps, None, None, None, rl_loss_val, loss_val)
         self.log_writer.write_entry(
             "loss_train",
             {
@@ -492,7 +491,7 @@ class DDSRunner(JiantRunner):
                 "task_step": train_state.task_steps[task_name],
                 "global_step": train_state.global_steps,
                 "loss_val": loss_val / task_specific_config.gradient_accumulation_steps,
-                "rl_loss": rl_loss_value / task_specific_config.gradient_accumulation_steps
+                "rl_loss": rl_loss_val / task_specific_config.gradient_accumulation_steps
             },
         )
 
