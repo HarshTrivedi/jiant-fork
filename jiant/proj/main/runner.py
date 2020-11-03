@@ -410,7 +410,6 @@ class DDSRunner(JiantRunner):
         loss_val = 0
         example_ids = []
 
-        batch = batch.to(self.device)
         model_output = wrap_jiant_forward(
             jiant_model=self.jiant_model, batch=batch, task=task, compute_loss=True
         )
@@ -440,25 +439,37 @@ class DDSRunner(JiantRunner):
         task_specific_config = self.jiant_task_container.task_specific_configs[task_name]
 
         batch, batch_metadata = train_dataloader_dict[task_name].pop()
+        batch = batch.to(self.device)
         # example_ids.extend(batch_metadata["example_id"])
 
-        loss_val = self.run_one_batch(batch, task)
+        ###########
+        ###########
+        loss = self.jiant_model.forward(batch=batch, task=task, compute_loss=True).loss
+
+        loss = self.complex_backpropagate(
+            loss=loss,
+            gradient_accumulation_steps=1,
+        )
+        loss_val += loss.item()
 
         self.optimizer_scheduler.step()
         # for debugging.
         # [(0 if p.grad is None or p.grad.sum().item() == 0 else 1)
         #  for g in self.optimizer_scheduler.optimizer.param_groups for p in g['params'] if g["shared"]]
         self.optimizer_scheduler.optimizer.zero_grad()
+        ###########
+        ###########
 
         train_state.step(task_name=task_name)
 
-        #######
-
+        ###########
+        ###########
         rl_loss = self.jiant_model.dds_weights_forward(
             batch=batch,
             rewards=batch.to_dict()['label_id'],
             compute_loss=True
         ).loss
+
         rl_loss = self.complex_backpropagate(
             loss=rl_loss,
             gradient_accumulation_steps=1,
@@ -470,6 +481,8 @@ class DDSRunner(JiantRunner):
         # [(0 if p.grad is None or p.grad.sum().item() == 0 else 1)
         #  for g in self.optimizer_scheduler.optimizer.param_groups for p in g['params'] if g["shared"]]
         self.optimizer_scheduler.optimizer.zero_grad()
+        ###########
+        ###########
 
         self.log_dds_details(task_name, train_state.global_steps, None, None, None, rl_loss_value, loss_val)
         self.log_writer.write_entry(
