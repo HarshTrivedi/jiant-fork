@@ -165,7 +165,7 @@ def create_optimizer_from_params(
             "params": [
                 p
                 for n, p in used_named_parameters
-                if n.startswith("encoder.e") and (not any(nd in n for nd in no_decay))
+                if (n.startswith("encoder.e") or n.startswith("dds_model.encoder.e")) and (not any(nd in n for nd in no_decay))
             ],
             "weight_decay": 0.01,
             "shared": True,
@@ -174,7 +174,7 @@ def create_optimizer_from_params(
             "params": [
                 p
                 for n, p in used_named_parameters
-                if (not n.startswith("encoder.e")) and (not any(nd in n for nd in no_decay))
+                if (not n.startswith("encoder.e") and not n.startswith("dds_model.encoder.e")) and (not any(nd in n for nd in no_decay))
             ],
             "weight_decay": 0.005,
             "shared": False,
@@ -183,7 +183,7 @@ def create_optimizer_from_params(
             "params": [
                 p
                 for n, p in used_named_parameters
-                if n.startswith("encoder.e") and any(nd in n for nd in no_decay)
+                if (n.startswith("encoder.e") or n.startswith("dds_model.encoder.e")) and any(nd in n for nd in no_decay)
             ],
             "weight_decay": 0.0,
             "shared": True,
@@ -192,7 +192,7 @@ def create_optimizer_from_params(
             "params": [
                 p
                 for n, p in used_named_parameters
-                if (not n.startswith("encoder.e")) and any(nd in n for nd in no_decay)
+                if (not n.startswith("encoder.e") and not n.startswith("dds_model.encoder.e")) and any(nd in n for nd in no_decay)
             ],
             "weight_decay": 0.0,
             "shared": False,

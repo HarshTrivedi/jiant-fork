@@ -305,7 +305,7 @@ class DDSOptimizer:
         self.scheduler = scheduler
 
     def step(self, batch: tasks.BatchMixin, rewards: torch.FloatTensor):
-        self.model.dds_weighting_model.train()
+        self.model.dds_model.train()
         assert not rewards.requires_grad # Temporary check.
 
         rl_loss = self.model.dds_weights_forward(batch, rewards, compute_loss=True).loss
@@ -334,14 +334,15 @@ class DDSRunner(JiantRunner):
         self.dds_optimizer = DDSOptimizer(scheduler=copy.deepcopy(self.optimizer_scheduler),
                                           model=self.jiant_model, lr=dds_lr)
 
-    def log_dds_details(self, task_name, global_steps, example_ids, rewards, dds_weights, rl_loss):
+    def log_dds_details(self, task_name, global_steps, example_ids, rewards, dds_weights, rl_loss, loss):
         dds_details_logs_file = os.path.join(self.output_dir, "dds_details_logs.jsonl")
         with open(dds_details_logs_file, "a+") as file:
             state_dict = {"task_name": task_name, "global_steps": global_steps,
                           "example_ids": example_ids,
                           "rewards": rewards,
                           "dds_weights": dds_weights,
-                          "rl_loss": rl_loss}
+                          "rl_loss": rl_loss,
+                          "loss": loss}
             file.write(json.dumps(state_dict)+"\n")
 
     def aproximate_vector_grad_dotproduct(
@@ -404,49 +405,26 @@ class DDSRunner(JiantRunner):
 
         return vector_grad_dotproducts
 
-    def run_one_batch(self, train_dataloader_dict, task_name, task, is_target_task):
-        task_specific_config = self.jiant_task_container.task_specific_configs[task_name]
-        gradient_accumulation_steps = (1 if is_target_task
-                                       else task_specific_config.gradient_accumulation_steps)
-        self.jiant_model.dds_weighting_model.eval()
 
+    def run_one_batch(self, batch, task):
         loss_val = 0
         example_ids = []
-        dds_weights = []
-        for _ in range(gradient_accumulation_steps):
-            batch, batch_metadata = train_dataloader_dict[task_name].pop()
-            batch = batch.to(self.device)
-            model_output = wrap_jiant_forward(
-                jiant_model=self.jiant_model, batch=batch, task=task, compute_loss=True, unreduced_loss=True
-            )
 
-            # To make sure the unreduced loss is in right shape.
-            # TODO: Add proper versions for other TaskModels, at least
-            # SpanQA and MCQ
-            assert tuple(model_output.loss.shape) == (len(batch),)
+        batch = batch.to(self.device)
+        model_output = wrap_jiant_forward(
+            jiant_model=self.jiant_model, batch=batch, task=task, compute_loss=True
+        )
 
-            if not is_target_task:
-                with torch.no_grad():
-                    weights = self.jiant_model.dds_weights_forward(batch).logits
-                dds_weights.extend([float(e) for e in weights.clone().cpu().numpy()])
-            else:
-                weights = 1.0
-                dds_weights.extend([1]*len(batch))
+        loss = model_output.loss
+        loss = self.complex_backpropagate(
+            loss=loss,
+            gradient_accumulation_steps=1,
+        )
+        loss_val += loss.item()
 
-            # loss = (weights * model_output.loss).mean() # TEMPORARY: (for diagnostic)
-            loss = model_output.loss.mean()
+        # example_ids.extend(batch_metadata["example_id"])
 
-            loss = self.complex_backpropagate(
-                loss=loss,
-                gradient_accumulation_steps=gradient_accumulation_steps,
-            )
-            loss_val += loss.item()
-
-            example_ids.extend(batch_metadata["example_id"])
-
-        # TODO: Try to collate batch and
-        # then remove forcing of grad_accum to 1 when is_target_task is True.
-        return batch, example_ids, dds_weights, loss_val
+        return loss_val
 
     def run_train_step(self, train_dataloader_dict: dict, train_state: TrainState):
         self.jiant_model.train()
@@ -461,49 +439,39 @@ class DDSRunner(JiantRunner):
 
         task_specific_config = self.jiant_task_container.task_specific_configs[task_name]
 
-        batch, example_ids, dds_weights, loss_val = self.run_one_batch(
-            train_dataloader_dict,
-            task_name, task, is_target_task=False
-        )
+        batch, batch_metadata = train_dataloader_dict[task_name].pop()
+        # example_ids.extend(batch_metadata["example_id"])
 
-        # Make sure the accumulation is turned off
-        assert batch.to_dict()['input_ids'].shape[0] == len(example_ids)
-        batch_size = len(example_ids)
+        loss_val = self.run_one_batch(batch, task)
 
-        source_grad = self.optimizer_scheduler.get_shared_grad(copy=True)
         self.optimizer_scheduler.step()
+        # for debugging.
+        # [(0 if p.grad is None or p.grad.sum().item() == 0 else 1)
+        #  for g in self.optimizer_scheduler.optimizer.param_groups for p in g['params'] if g["shared"]]
         self.optimizer_scheduler.optimizer.zero_grad()
 
         train_state.step(task_name=task_name)
-        if train_state.global_steps % self.dds_update_freq == 0:
 
-            for step in range(self.dds_update_steps):
-                # # Turn off temporarily:
+        #######
 
-                # self.run_one_batch(
-                #     train_dataloader_dict,
-                #     self.target_task,
-                #     self.jiant_task_container.task_sampler.task_dict[self.target_task],
-                #     is_target_task=True
-                # )
+        rl_loss = self.jiant_model.dds_weights_forward(
+            batch=batch,
+            rewards=batch.to_dict()['label_id'],
+            compute_loss=True
+        ).loss
+        rl_loss = self.complex_backpropagate(
+            loss=rl_loss,
+            gradient_accumulation_steps=1,
+        )
+        rl_loss_value = rl_loss.item()
 
-                # target_grad = self.optimizer_scheduler.get_shared_grad(copy=True)
-                # self.optimizer_scheduler.optimizer.zero_grad()
+        self.optimizer_scheduler.step()
+        # for debugging.
+        # [(0 if p.grad is None or p.grad.sum().item() == 0 else 1)
+        #  for g in self.optimizer_scheduler.optimizer.param_groups for p in g['params'] if g["shared"]]
+        self.optimizer_scheduler.optimizer.zero_grad()
 
-                # rewards = self.aproximate_vector_grad_dotproduct(
-                #     batch=batch,
-                #     task=task_name,
-                #     vector=target_grad
-                # )
-
-                # Very simple diagnostic experiment. Hardcode the rewards.
-                rewards = batch.to_dict()['label_id']
-
-                rl_loss = self.dds_optimizer.step(batch, rewards)
-
-        rewards = [float(e) for e in rewards.cpu().numpy()]
-        rl_loss = rl_loss.cpu().item()
-        self.log_dds_details(task_name, train_state.global_steps, example_ids, rewards, dds_weights, rl_loss)
+        self.log_dds_details(task_name, train_state.global_steps, None, None, None, rl_loss_value, loss_val)
         self.log_writer.write_entry(
             "loss_train",
             {
@@ -511,7 +479,7 @@ class DDSRunner(JiantRunner):
                 "task_step": train_state.task_steps[task_name],
                 "global_step": train_state.global_steps,
                 "loss_val": loss_val / task_specific_config.gradient_accumulation_steps,
-                "rl_loss": rl_loss
+                "rl_loss": rl_loss_value / task_specific_config.gradient_accumulation_steps
             },
         )
 

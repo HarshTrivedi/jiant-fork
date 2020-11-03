@@ -93,7 +93,7 @@ class JiantModelWithDDSModel(JiantModel):
             hidden_dropout_prob=encoder.config.hidden_dropout_prob,
             num_labels=3
         )
-        self.dds_weighting_model = taskmodels.ClassificationModel(encoder=encoder,
+        self.dds_model = taskmodels.ClassificationModel(encoder=encoder,
                                                                   classification_head=classification_head)
         self._loss = nn.CrossEntropyLoss()
 
@@ -101,7 +101,7 @@ class JiantModelWithDDSModel(JiantModel):
         #     hidden_size=encoder.config.hidden_size,
         #     hidden_dropout_prob=encoder.config.hidden_dropout_prob,
         # )
-        # self.dds_weighting_model = taskmodels.RegressionModel(
+        # self.dds_model = taskmodels.RegressionModel(
         #     encoder=encoder,
         #     regression_head=regression_head
         # )
@@ -114,13 +114,13 @@ class JiantModelWithDDSModel(JiantModel):
             compute_loss: bool = False
         ):
 
-        dds_weight_logits = self.dds_weighting_model(
+        dds_weight_logits = self.dds_model(
             batch=batch, task=None, tokenizer=None
         ).logits.view(-1)
         dds_weights = dds_weight_logits.softmax(dim=-1) # Not useful.
 
 
-        # dds_weight_logits = self.dds_weighting_model(
+        # dds_weight_logits = self.dds_model(
         #     batch=batch, task=None, tokenizer=None
         # ).logits.view(-1)
         # dds_weights = dds_weight_logits.softmax(dim=-1)
