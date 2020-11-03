@@ -445,19 +445,19 @@ class DDSRunner(JiantRunner):
         ###########
         ###########
         loss_val = 0
-        # loss = self.jiant_model.forward(batch=batch, task=task, compute_loss=True)['loss']
-        # loss = self.complex_backpropagate(
-        #     loss=loss,
-        #     gradient_accumulation_steps=1,
-        # )
-        # loss_val = loss.item()
-        # self.optimizer_scheduler.step()
-        # # for debugging.
-        # # [(0 if p.grad is None or p.grad.sum().item() == 0 else 1)
-        # #  for g in self.optimizer_scheduler.optimizer.param_groups for p in g['params'] if g["shared"]]
-        # self.optimizer_scheduler.optimizer.zero_grad()
-        # ###########
-        # ###########
+        loss = self.jiant_model.forward(batch=batch, task=task, compute_loss=True)['loss']
+        loss = self.complex_backpropagate(
+            loss=loss,
+            gradient_accumulation_steps=1,
+        )
+        loss_val = loss.item()
+        self.optimizer_scheduler.step()
+        # for debugging.
+        # [(0 if p.grad is None or p.grad.sum().item() == 0 else 1)
+        #  for g in self.optimizer_scheduler.optimizer.param_groups for p in g['params'] if g["shared"]]
+        self.optimizer_scheduler.optimizer.zero_grad()
+        ###########
+        ###########
 
         train_state.step(task_name=task_name)
 
