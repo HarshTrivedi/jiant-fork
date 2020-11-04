@@ -88,27 +88,26 @@ class JiantModelWithDDSModel(JiantModel):
         super().__init__(**kwargs)
         encoder = copy.deepcopy(kwargs["encoder"])
 
-        classification_head = heads.ClassificationHead(
-            hidden_size=encoder.config.hidden_size,
-            hidden_dropout_prob=encoder.config.hidden_dropout_prob,
-            num_labels=3
-        )
-
-        # NOTE: Do not change attribute dds_model to something else.
-        # If you do, make sure to change it in runscript.py as well (after delegate_load_from_path)
-        self.dds_model = taskmodels.ClassificationModel(encoder=encoder,
-                                                        classification_head=classification_head)
-        # self._loss = nn.CrossEntropyLoss()
-
-        # regression_head = heads.RegressionHead(
+        # classification_head = heads.ClassificationHead(
         #     hidden_size=encoder.config.hidden_size,
         #     hidden_dropout_prob=encoder.config.hidden_dropout_prob,
+        #     num_labels=3
         # )
-        # self.dds_model = taskmodels.RegressionModel(
-        #     encoder=encoder,
-        #     regression_head=regression_head
-        # )
-        # self._mse_loss = nn.MSELoss()
+        # # NOTE: Do not change attribute dds_model to something else.
+        # # If you do, make sure to change it in runscript.py as well (after delegate_load_from_path)
+        # self.dds_model = taskmodels.ClassificationModel(encoder=encoder,
+        #                                                 classification_head=classification_head)
+
+        regression_head = heads.RegressionHead(
+            hidden_size=encoder.config.hidden_size,
+            hidden_dropout_prob=encoder.config.hidden_dropout_prob,
+        )
+        # # NOTE: Do not change attribute dds_model to something else.
+        # # If you do, make sure to change it in runscript.py as well (after delegate_load_from_path)
+        self.dds_model = taskmodels.RegressionModel(
+            encoder=encoder,
+            regression_head=regression_head
+        )
 
     def dds_weights_forward(
             self,
@@ -117,32 +116,22 @@ class JiantModelWithDDSModel(JiantModel):
             compute_loss: bool = False
         ):
 
-        return self.dds_model(
-            batch=batch, task=None, tokenizer=None, compute_loss=compute_loss
-        )
-
-        # dds_weight_logits = self.dds_model(
-        #     batch=batch, task=None, tokenizer=None
-        # ).logits.view(-1)
-        # dds_weights = dds_weight_logits.softmax(dim=-1) # Not useful.
-
-
-        # dds_weight_logits = self.dds_model(
-        #     batch=batch, task=None, tokenizer=None
-        # ).logits.view(-1)
-        # dds_weights = dds_weight_logits.softmax(dim=-1)
-
-        # if not compute_loss:
-        #     return LogitsOutput(logits=dds_weights)
-
-        # dds_loss = -(rewards*dds_weights).sum() # TEMPORARY comment for diagnostic.
-        # dds_loss = self._mse_loss(dds_weights, rewards.float()) # Temporary mse loss.
-
-        # dds_loss = self._loss(
-        #     dds_weight_logits.view(-1, 3), batch.label_id.view(-1),
+        # return self.dds_model(
+        #     batch=batch, task=None, tokenizer=None, compute_loss=compute_loss
         # )
 
-        # return LogitsAndLossOutput(logits=dds_weights, loss=dds_loss)
+        dds_weight_logits = self.dds_model(
+            batch=batch, task=None, tokenizer=None, compute_loss=False
+        ).logits.view(-1)
+        dds_weights = dds_weight_logits.softmax(dim=-1)
+
+        if not compute_loss:
+            return LogitsOutput(logits=dds_weights)
+
+        dds_loss = -(rewards*dds_weights).sum()
+        dds_loss = self._mse_loss(dds_weights, rewards.float())
+
+        return LogitsAndLossOutput(logits=dds_weights, loss=dds_loss)
 
 
 class JiantModelWithAdapterFusion(JiantModel):
