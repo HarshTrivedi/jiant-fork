@@ -129,7 +129,6 @@ class JiantModelWithDDSModel(JiantModel):
             return LogitsOutput(logits=dds_weights)
 
         dds_loss = -(rewards*dds_weights).sum()
-        dds_loss = self._mse_loss(dds_weights, rewards.float())
 
         return LogitsAndLossOutput(logits=dds_weights, loss=dds_loss)
 
