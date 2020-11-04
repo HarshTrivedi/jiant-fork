@@ -224,9 +224,6 @@ def setup_runner(
             rparams=rparams,
             log_writer=quick_init_out.log_writer,
             target_task=args.dds_target_task,
-            dds_update_freq=args.dds_update_freq,
-            dds_update_steps=args.dds_update_steps,
-            dds_lr=args.dds_lr,
             output_dir=args.output_dir
         )
 

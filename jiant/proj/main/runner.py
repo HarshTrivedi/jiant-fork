@@ -294,45 +294,15 @@ class ReptileRunner(JiantRunner):
         )
 
 
-class DDSOptimizer:
-    def __init__(
-        self,
-        scheduler: OptimizerSchedulerWithGradOps,
-        model: nn.Module,
-        lr: float
-    ):
-        self.model = model
-        self.scheduler = scheduler
-
-    def step(self, batch: tasks.BatchMixin, rewards: torch.FloatTensor):
-        self.model.dds_model.train()
-        assert not rewards.requires_grad # Temporary check.
-
-        rl_loss = self.model.dds_weights_forward(batch, rewards, compute_loss=True).loss
-        rl_loss.backward()
-
-        self.scheduler.step()
-        self.scheduler.optimizer.zero_grad()
-        return rl_loss
-
-
 class DDSRunner(JiantRunner):
 
     def __init__(self,
-                 dds_update_freq,
-                 dds_update_steps,
-                 dds_lr,
                  target_task,
                  output_dir,
                  **kwarg):
         super().__init__(**kwarg)
-        self.dds_update_freq = dds_update_freq
         self.target_task = target_task
         self.output_dir = output_dir
-
-        self.dds_update_steps = dds_update_steps
-        self.dds_optimizer = DDSOptimizer(scheduler=copy.deepcopy(self.optimizer_scheduler),
-                                          model=self.jiant_model, lr=dds_lr)
 
     def log_dds_details(self, task_name, global_steps, example_ids, rewards, dds_weights, rl_loss, loss):
         dds_details_logs_file = os.path.join(self.output_dir, "dds_details_logs.jsonl")
