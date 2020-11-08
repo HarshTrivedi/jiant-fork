@@ -102,9 +102,7 @@ class RunConfiguration(zconf.RunConfig):
     accumulate_target_grad = zconf.attr(action="store_true")
     multidds_force_skip_tasks = zconf.attr(default="", type=str)
     dds_target_task = zconf.attr(default="", type=str)
-    dds_update_freq = zconf.attr(default=10, type=int)
-    dds_update_steps = zconf.attr(default=10, type=int)
-    dds_lr = zconf.attr(default=1e-5, type=float)
+    dds_target_optimization_choice = zconf.attr(default="", type=str)
 
 
 @zconf.run_config
@@ -224,7 +222,8 @@ def setup_runner(
             rparams=rparams,
             log_writer=quick_init_out.log_writer,
             target_task=args.dds_target_task,
-            output_dir=args.output_dir
+            output_dir=args.output_dir,
+            target_optimization_choice=args.dds_target_optimization_choice
         )
 
     elif args.runner_type == "grad_sim":
