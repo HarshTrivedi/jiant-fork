@@ -103,6 +103,7 @@ class RunConfiguration(zconf.RunConfig):
     multidds_force_skip_tasks = zconf.attr(default="", type=str)
     dds_target_task = zconf.attr(default="", type=str)
     dds_target_optimization_choice = zconf.attr(default="", type=str)
+    dds_aprx_eps = zconf.attr(default=1e-4, type=float)
 
 
 @zconf.run_config
@@ -223,7 +224,8 @@ def setup_runner(
             log_writer=quick_init_out.log_writer,
             target_task=args.dds_target_task,
             output_dir=args.output_dir,
-            target_optimization_choice=args.dds_target_optimization_choice
+            target_optimization_choice=args.dds_target_optimization_choice,
+            aprx_eps=args.dds_aprx_eps
         )
 
     elif args.runner_type == "grad_sim":
