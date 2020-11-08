@@ -300,11 +300,13 @@ class DDSRunner(JiantRunner):
                  target_task,
                  output_dir,
                  target_optimization_choice,
+                 aprx_eps: 1e-4,
                  **kwarg):
         super().__init__(**kwarg)
         self.target_task = target_task
         self.output_dir = output_dir
         self.target_optimization_choice = target_optimization_choice
+        self.aprx_eps = aprx_eps
 
     def log_dds_details(self, task_name, global_steps, example_ids,
                         rewards, dds_weights, rl_loss, loss, extras):
@@ -324,8 +326,7 @@ class DDSRunner(JiantRunner):
             self,
             batch: tasks.BatchMixin,
             task: tasks.Task,
-            vector: List,
-            eps: float = 1e-4
+            vector: List
         ):
         """
         See equation 7 of DDS paper: https://arxiv.org/pdf/1911.10088.pdf
@@ -349,7 +350,7 @@ class DDSRunner(JiantRunner):
             params = self.optimizer_scheduler.get_all_params(copy=False)
             for param, grad in zip(params, vector):
                 if grad is not None:
-                    param += (eps*grad)
+                    param += (self.aprx_eps*grad)
 
             outputs = wrap_jiant_forward(
                 jiant_model=self.jiant_model,
@@ -360,12 +361,12 @@ class DDSRunner(JiantRunner):
             )
             eps_instance_losses = outputs.loss
 
-            vector_grad_dotproducts = (eps_instance_losses - instance_losses)/eps
+            vector_grad_dotproducts = (eps_instance_losses - instance_losses)/self.aprx_eps
 
             # Reset the small step back
             for param, grad in zip(params, vector):
                 if grad is not None:
-                    param -= (eps*grad)
+                    param -= (self.aprx_eps*grad)
 
             # # Only for diagnostic. TODO: Remove
             # Make sure outputs.loss is same as instance_losses
