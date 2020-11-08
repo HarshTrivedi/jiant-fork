@@ -376,25 +376,6 @@ class DDSRunner(JiantRunner):
         return vector_grad_dotproducts
 
 
-    def run_one_batch(self, batch, task):
-        loss_val = 0
-        example_ids = []
-
-        model_output = wrap_jiant_forward(
-            jiant_model=self.jiant_model, batch=batch, task=task, compute_loss=True
-        )
-
-        loss = model_output.loss
-        loss = self.complex_backpropagate(
-            loss=loss,
-            gradient_accumulation_steps=1,
-        )
-        loss_val += loss.item()
-
-        # example_ids.extend(batch_metadata["example_id"])
-
-        return loss_val
-
     def run_train_step(self, train_dataloader_dict: dict, train_state: TrainState):
         self.jiant_model.train()
 
@@ -402,45 +383,100 @@ class DDSRunner(JiantRunner):
         # Sample only non-target-task for taking optimization steps.
         # TODO: This should be ideally handled in the sampler by
         # some argumnet like force_skip_tasks.
-            task_name, task = self.jiant_task_container.task_sampler.pop()
-            if task_name != self.target_task:
+            source_task_name, source_task = self.jiant_task_container.task_sampler.pop()
+            if source_task_name != self.target_task:
                 break
 
+        check_dot_approximation = True
         # check = {key: bool(torch.all(self.jiant_model.encoder.state_dict()[key] == self.jiant_model.dds_model.encoder.state_dict()[key]))
         #          for key in self.jiant_model.encoder.state_dict().keys()}
-        # breakpoint()
 
-        task_specific_config = self.jiant_task_container.task_specific_configs[task_name]
+        task_specific_config = self.jiant_task_container.task_specific_configs[source_task_name]
+        assert task_specific_config.gradient_accumulation_steps != 1, "Grad accum isn't supported for this setup."
 
-        batch, batch_metadata = train_dataloader_dict[task_name].pop()
-        batch = batch.to(self.device)
-        # example_ids.extend(batch_metadata["example_id"])
+        source_batch, source_batch_metadata = train_dataloader_dict[source_task_name].pop()
+        source_batch = source_batch.to(self.device)
+        example_ids.extend(source_batch_metadata["example_id"])
 
         ###########
         ###########
         loss_val = 0
-        loss = self.jiant_model.forward(batch=batch, task=task, compute_loss=True)['loss']
+        losses = self.jiant_model.forward(batch=source_batch, task=source_task, compute_loss=True, unreduced_loss=True)['loss']
+
+        with torch.no_grad():
+            weights = self.jiant_model.dds_weights_forward(batch=source_batch, compute_loss=False).logits
+
+        assert not weights.requires_grad
+        loss = (losses*weights).sum()
+
         loss = self.complex_backpropagate(
             loss=loss,
             gradient_accumulation_steps=1,
         )
         loss_val = loss.item()
+
+        if check_dot_approximation:
+            source_grad = self.optimizer_scheduler.get_shared_grad(copy=True, get_base=True)
         self.optimizer_scheduler.step()
-        # for debugging.
-        # [(0 if p.grad is None or p.grad.sum().item() == 0 else 1)
-        #  for g in self.optimizer_scheduler.optimizer.param_groups for p in g['params'] if g["shared"]]
         self.optimizer_scheduler.optimizer.zero_grad()
         ###########
         ###########
 
-        train_state.step(task_name=task_name)
+
+        ######
+        target_batch, _ = train_dataloader_dict[self.target_task].pop()
+        target_batch = target_batch.to(self.device)
+
+        target_loss = self.jiant_model.forward(batch=target_batch, task=self.target_task,
+                                               compute_loss=True,)['loss']
+
+        target_loss = self.complex_backpropagate(
+            loss=target_loss,
+            gradient_accumulation_steps=1,
+        )
+        target_grad = self.optimizer_scheduler.get_shared_grad(copy=True, get_base=True)
+
+        if self.target_optimization_choice == "full":
+            # Take full step on target dataset
+            self.optimizer_scheduler.step()
+        elif self.target_optimization_choice == "head_only":
+            # Zero out the shared gradients and then take step on target dataset
+            shared_grad self.optimizer_scheduler.get_shared_grad(copy=False, get_base=True)
+            for g in shared_grad:
+                for p in g["params"]:
+                    p *= 0
+            self.optimizer_scheduler.step()
+        elif self.target_optimization_choice == "skip":
+            # Skip step on the target dataset.
+            pass
+        else:
+            raise Exepction("Please set `target_optimization_choice`.")
+
+        self.optimizer_scheduler.optimizer.zero_grad()
+
+        del target_batch
+        ######
+
 
         ###########
         ###########
         rl_loss_val = 0
-        rl_loss = self.jiant_model.dds_weights_forward(
-            batch=batch,
-            rewards=batch.to_dict()['label_id'],
+
+        aprx_rewards = self.aproximate_vector_grad_dotproduct(batch=source_batch, task=task_name, vector=target_grad)
+        if check_dot_approximation:
+            assert source_batch.to_dict()["input_ids"].shape[0] == 1
+            self.optimizer_scheduler.grad_sim_metric = "dot_product"
+            real_rewards = self.optimizer_scheduler.grad_sim(source_grad, target_grad)
+            # Check if there's correlation between real and aprx dot_product
+            print({"real_reward": real_rewards.item(), "aprx_rewards": aprx_rewards.item()})
+
+        # rewards = source_batch.to_dict()['label_id'] # Diagnostic
+        # rewards = real_rewards # Another diagnostic for batch-size=1
+        # rewards = aprx_rewards # Actually what we need
+
+        rl_loss = self.jiant_model.dds_weights_forward( # TODO: 2nd call can be saved.
+            batch=source_batch,
+            rewards=rewards,
             compute_loss=True
         ).loss
         rl_loss = self.complex_backpropagate(
@@ -450,14 +486,14 @@ class DDSRunner(JiantRunner):
         rl_loss_val = rl_loss.item()
 
         self.optimizer_scheduler.step()
-        # for debugging.
-        # [(0 if p.grad is None or p.grad.sum().item() == 0 else 1)
-        #  for g in self.optimizer_scheduler.optimizer.param_groups for p in g['params'] if g["shared"]]
         self.optimizer_scheduler.optimizer.zero_grad()
         ###########
         ###########
 
-        self.log_dds_details(task_name, train_state.global_steps, None, None, None, rl_loss_val, loss_val)
+        train_state.step(task_name=source_task_name)
+
+        self.log_dds_details(task_name, train_state.global_steps, example_ids,
+                             rewards, weights, rl_loss_val, loss_val)
         self.log_writer.write_entry(
             "loss_train",
             {
