@@ -325,7 +325,7 @@ class DDSRunner(JiantRunner):
             batch: tasks.BatchMixin,
             task: tasks.Task,
             vector: List,
-            eps: float = 0.1
+            eps: float = 1e-4
         ):
         """
         See equation 7 of DDS paper: https://arxiv.org/pdf/1911.10088.pdf
