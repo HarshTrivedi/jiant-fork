@@ -306,7 +306,8 @@ class DDSRunner(JiantRunner):
         self.output_dir = output_dir
         self.target_optimization_choice = target_optimization_choice
 
-    def log_dds_details(self, task_name, global_steps, example_ids, rewards, dds_weights, rl_loss, loss):
+    def log_dds_details(self, task_name, global_steps, example_ids,
+                        rewards, dds_weights, rl_loss, loss, extras):
         dds_details_logs_file = os.path.join(self.output_dir, "dds_details_logs.jsonl")
         with open(dds_details_logs_file, "a+") as file:
             state_dict = {"task_name": task_name, "global_steps": global_steps,
@@ -315,6 +316,8 @@ class DDSRunner(JiantRunner):
                           "dds_weights": dds_weights,
                           "rl_loss": rl_loss,
                           "loss": loss}
+            for key, val in extras.items():
+                state_dict[key] = val
             file.write(json.dumps(state_dict)+"\n")
 
     def aproximate_vector_grad_dotproduct(
@@ -460,12 +463,14 @@ class DDSRunner(JiantRunner):
         rl_loss_val = 0
 
         aprx_rewards = self.aproximate_vector_grad_dotproduct(batch=source_batch, task=source_task_name, vector=target_grad)
+
+        extras = {}
         if check_dot_approximation:
             assert source_batch.to_dict()["input_ids"].shape[0] == 1
             self.optimizer_scheduler.grad_sim_metric = "dot_product"
             real_rewards = self.optimizer_scheduler.grad_sim(source_grad, target_grad)
-            # Check if there's correlation between real and aprx dot_product
-            print({"real_reward": real_rewards.item(), "aprx_rewards": aprx_rewards.item()})
+            extras["real_reward"] = real_rewards.item()
+            extras["aprx_rewards"] = aprx_rewards.item()
 
         # rewards = source_batch.to_dict()['label_id'] # Diagnostic
         # rewards = real_rewards # Another diagnostic for batch-size=1
@@ -492,7 +497,7 @@ class DDSRunner(JiantRunner):
         rewards = [float(e) for e in rewards.cpu().numpy()]
         weights = [float(e) for e in weights.cpu().numpy()]
         self.log_dds_details(source_task_name, train_state.global_steps, example_ids,
-                             rewards, weights, rl_loss_val, loss_val)
+                             rewards, weights, rl_loss_val, loss_val, extras)
         self.log_writer.write_entry(
             "loss_train",
             {
