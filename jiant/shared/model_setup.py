@@ -73,13 +73,21 @@ class OptimizerSchedulerWithGradOps(OptimizerScheduler):
                               if get_base == is_base]  if g["shared"] else []
                              for g in self.optimizer.param_groups]
 
-        # shared_param_grad = [
-        #     [p.grad for p in g["params"]] if g["shared"] else []
-        #     for g in self.optimizer.param_groups
-        # ]
         if copy:
             shared_param_grad = deepcopy(shared_param_grad)
         return shared_param_grad
+
+    def get_all_params(self, copy=False):
+        params = [p for g in self.optimizer.param_groups for p in g["params"] if p is not None]
+        if copy:
+            params = deepcopy(params)
+        return params
+
+    def get_all_grads(self, copy=False):
+        grads = [p.grad for g in self.optimizer.param_groups for p in g["params"] if p is not None]
+        if copy:
+            grads = deepcopy(grads)
+        return grads
 
     def grad_sim(self, grad_a, grad_b, reduce=True):
         if reduce:
