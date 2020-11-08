@@ -46,9 +46,10 @@ class OptimizerScheduler:
         self.optimizer = optimizer
         self.scheduler = scheduler
 
-    def step(self):
+    def step(self, skip_scheduler = False):
         self.optimizer.step()
-        self.scheduler.step()
+        if skip_scheduler:
+            self.scheduler.step()
 
     def state_dict(self):
         return {

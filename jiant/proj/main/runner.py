@@ -441,14 +441,14 @@ class DDSRunner(JiantRunner):
 
         if self.target_optimization_choice == "full":
             # Take full step on target dataset
-            self.optimizer_scheduler.step()
+            self.optimizer_scheduler.step(skip_scheduler=True)
         elif self.target_optimization_choice == "head_only":
             # Zero out the shared gradients and then take step on target dataset
             shared_grad = self.optimizer_scheduler.get_shared_grad(copy=False, get_base=True)
             for g in shared_grad:
                 for p in g:
                     p *= 0
-            self.optimizer_scheduler.step()
+            self.optimizer_scheduler.step(skip_scheduler=True)
         elif self.target_optimization_choice == "skip":
             # Skip step on the target dataset.
             pass
@@ -490,7 +490,7 @@ class DDSRunner(JiantRunner):
         )
         rl_loss_val = rl_loss.item()
 
-        self.optimizer_scheduler.step()
+        self.optimizer_scheduler.step(skip_scheduler=True)
         self.optimizer_scheduler.optimizer.zero_grad()
         ###########
         ###########
