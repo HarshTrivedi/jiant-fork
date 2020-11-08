@@ -1,6 +1,6 @@
 import copy
 import json
-from typing import Dict
+from typing import Dict, List
 from dataclasses import dataclass
 import os
 import torch
@@ -324,8 +324,8 @@ class DDSRunner(JiantRunner):
             self,
             batch: tasks.BatchMixin,
             task: tasks.Task,
-            vector: Dict,
-            eps: float = 1e-6
+            vector: List,
+            eps: float = 0.1
         ):
         """
         See equation 7 of DDS paper: https://arxiv.org/pdf/1911.10088.pdf
@@ -345,10 +345,11 @@ class DDSRunner(JiantRunner):
             instance_losses = outputs.loss
 
             # Take a very small step in the direction of vector
-            optimizer_param_groups = self.optimizer_scheduler.optimizer.param_groups
-            for p_group_idx, _ in enumerate(vector):
-                for p_idx, _ in enumerate(vector[p_group_idx]):
-                    optimizer_param_groups[p_group_idx]['params'][p_idx] += (eps*vector[p_group_idx][p_idx])
+
+            params = self.optimizer_scheduler.get_all_params(copy=False)
+            for param, grad in zip(params, vector):
+                if grad is not None:
+                    param += (eps*grad)
 
             outputs = wrap_jiant_forward(
                 jiant_model=self.jiant_model,
@@ -362,12 +363,12 @@ class DDSRunner(JiantRunner):
             vector_grad_dotproducts = (eps_instance_losses - instance_losses)/eps
 
             # Reset the small step back
-            optimizer_param_groups = self.optimizer_scheduler.optimizer.param_groups
-            for p_group_idx, _ in enumerate(vector):
-                for p_idx, _ in enumerate(vector[p_group_idx]):
-                    optimizer_param_groups[p_group_idx]['params'][p_idx] -= (eps*vector[p_group_idx][p_idx])
+            for param, grad in zip(params, vector):
+                if grad is not None:
+                    param -= (eps*grad)
 
             # # Only for diagnostic. TODO: Remove
+            # Make sure outputs.loss is same as instance_losses
             # outputs = wrap_jiant_forward(
             #     jiant_model=self.jiant_model,
             #     batch=batch,
@@ -434,7 +435,9 @@ class DDSRunner(JiantRunner):
             loss=target_loss,
             gradient_accumulation_steps=1,
         )
-        target_grad = self.optimizer_scheduler.get_shared_grad(copy=True, get_base=True)
+        target_grad = self.optimizer_scheduler.get_all_grads(copy=True)
+        if check_dot_approximation:
+            target_grad_for_sim = self.optimizer_scheduler.get_shared_grad(copy=True, get_base=True)
 
         if self.target_optimization_choice == "full":
             # Take full step on target dataset
@@ -468,9 +471,9 @@ class DDSRunner(JiantRunner):
         if check_dot_approximation:
             assert source_batch.to_dict()["input_ids"].shape[0] == 1
             self.optimizer_scheduler.grad_sim_metric = "dot_product"
-            real_rewards = self.optimizer_scheduler.grad_sim(source_grad, target_grad)
+            real_rewards = self.optimizer_scheduler.grad_sim(source_grad, target_grad_for_sim)
             extras["real_reward"] = real_rewards.item()
-            extras["aprx_rewards"] = aprx_rewards.item()
+            extras["aprx_reward"] = aprx_rewards.item()
 
         # rewards = source_batch.to_dict()['label_id'] # Diagnostic
         # rewards = real_rewards # Another diagnostic for batch-size=1
