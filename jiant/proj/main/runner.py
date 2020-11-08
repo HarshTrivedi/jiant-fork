@@ -299,10 +299,12 @@ class DDSRunner(JiantRunner):
     def __init__(self,
                  target_task,
                  output_dir,
+                 target_optimization_choice,
                  **kwarg):
         super().__init__(**kwarg)
         self.target_task = target_task
         self.output_dir = output_dir
+        self.target_optimization_choice = target_optimization_choice
 
     def log_dds_details(self, task_name, global_steps, example_ids, rewards, dds_weights, rl_loss, loss):
         dds_details_logs_file = os.path.join(self.output_dir, "dds_details_logs.jsonl")
@@ -380,23 +382,18 @@ class DDSRunner(JiantRunner):
         self.jiant_model.train()
 
         while True:
-        # Sample only non-target-task for taking optimization steps.
-        # TODO: This should be ideally handled in the sampler by
-        # some argumnet like force_skip_tasks.
             source_task_name, source_task = self.jiant_task_container.task_sampler.pop()
             if source_task_name != self.target_task:
                 break
 
         check_dot_approximation = True
-        # check = {key: bool(torch.all(self.jiant_model.encoder.state_dict()[key] == self.jiant_model.dds_model.encoder.state_dict()[key]))
-        #          for key in self.jiant_model.encoder.state_dict().keys()}
 
         task_specific_config = self.jiant_task_container.task_specific_configs[source_task_name]
         assert task_specific_config.gradient_accumulation_steps != 1, "Grad accum isn't supported for this setup."
 
         source_batch, source_batch_metadata = train_dataloader_dict[source_task_name].pop()
         source_batch = source_batch.to(self.device)
-        example_ids.extend(source_batch_metadata["example_id"])
+        example_ids = source_batch_metadata["example_id"]
 
         ###########
         ###########
@@ -441,9 +438,9 @@ class DDSRunner(JiantRunner):
             self.optimizer_scheduler.step()
         elif self.target_optimization_choice == "head_only":
             # Zero out the shared gradients and then take step on target dataset
-            shared_grad self.optimizer_scheduler.get_shared_grad(copy=False, get_base=True)
+            shared_grad = self.optimizer_scheduler.get_shared_grad(copy=False, get_base=True)
             for g in shared_grad:
-                for p in g["params"]:
+                for p in g:
                     p *= 0
             self.optimizer_scheduler.step()
         elif self.target_optimization_choice == "skip":
@@ -462,7 +459,7 @@ class DDSRunner(JiantRunner):
         ###########
         rl_loss_val = 0
 
-        aprx_rewards = self.aproximate_vector_grad_dotproduct(batch=source_batch, task=task_name, vector=target_grad)
+        aprx_rewards = self.aproximate_vector_grad_dotproduct(batch=source_batch, task=source_task_name, vector=target_grad)
         if check_dot_approximation:
             assert source_batch.to_dict()["input_ids"].shape[0] == 1
             self.optimizer_scheduler.grad_sim_metric = "dot_product"
@@ -472,7 +469,7 @@ class DDSRunner(JiantRunner):
 
         # rewards = source_batch.to_dict()['label_id'] # Diagnostic
         # rewards = real_rewards # Another diagnostic for batch-size=1
-        # rewards = aprx_rewards # Actually what we need
+        rewards = aprx_rewards # Actually what we need
 
         rl_loss = self.jiant_model.dds_weights_forward( # TODO: 2nd call can be saved.
             batch=source_batch,
@@ -492,13 +489,15 @@ class DDSRunner(JiantRunner):
 
         train_state.step(task_name=source_task_name)
 
-        self.log_dds_details(task_name, train_state.global_steps, example_ids,
+        rewards = [float(e) for e in rewards.cpu().numpy()]
+        weights = [float(e) for e in weights.cpu().numpy()]
+        self.log_dds_details(source_task_name, train_state.global_steps, example_ids,
                              rewards, weights, rl_loss_val, loss_val)
         self.log_writer.write_entry(
             "loss_train",
             {
-                "task": task_name,
-                "task_step": train_state.task_steps[task_name],
+                "task": source_task_name,
+                "task_step": train_state.task_steps[source_task_name],
                 "global_step": train_state.global_steps,
                 "loss_val": loss_val / task_specific_config.gradient_accumulation_steps,
                 "rl_loss": rl_loss_val / task_specific_config.gradient_accumulation_steps
