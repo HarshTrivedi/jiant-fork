@@ -103,6 +103,7 @@ class RunConfiguration(zconf.RunConfig):
     multidds_force_skip_tasks = zconf.attr(default="", type=str)
     dds_target_task = zconf.attr(default="", type=str)
     dds_target_optimization_choice = zconf.attr(default="", type=str)
+    dds_square_rewards = zconf.attr(action="store_true")
     dds_aprx_eps = zconf.attr(default=1e-4, type=float)
 
 
@@ -225,6 +226,7 @@ def setup_runner(
             target_task=args.dds_target_task,
             output_dir=args.output_dir,
             target_optimization_choice=args.dds_target_optimization_choice,
+            square_rewards=args.dds_square_rewards,
             aprx_eps=args.dds_aprx_eps
         )
 
