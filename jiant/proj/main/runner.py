@@ -482,6 +482,9 @@ class DDSRunner(JiantRunner):
                                                               vector=target_grad,
                                                               start_optimizer_state_dict=previous_optimizer_state_dict)
 
+        hard_coded_rewards = [abs(int(example_id.split("-")[-1])-1) for example_id in example_ids]
+        aprx_rewards = torch.tensor(hard_coded_rewards, device=self.device)
+
         extras = {}
         if check_dot_approximation:
             assert source_batch.to_dict()["input_ids"].shape[0] == 1
