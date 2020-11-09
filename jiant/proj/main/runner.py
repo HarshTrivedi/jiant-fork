@@ -307,6 +307,7 @@ class DDSRunner(JiantRunner):
         self.target_task = target_task
         self.output_dir = output_dir
         self.target_optimization_choice = target_optimization_choice
+        self.square_rewards = square_rewards
         self.aprx_eps = aprx_eps
 
     def log_dds_details(self, task_name, global_steps, example_ids,
