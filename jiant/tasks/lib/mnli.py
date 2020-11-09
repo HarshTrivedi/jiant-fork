@@ -94,10 +94,11 @@ class MnliTask(GlueMixin, Task):
         # noinspection DuplicatedCode
         examples = []
         for (i, line) in enumerate(lines):
+            is_artifacted = int(line.get("is_artifacted", False))
             examples.append(
                 Example(
                     # NOTE: get_glue_preds() is dependent on this guid format.
-                    guid="%s-%s" % (set_type, i),
+                    guid="%s-%s-%s" % (set_type, i, is_artifacted),
                     premise=line["premise"],
                     hypothesis=line["hypothesis"],
                     label=line["label"] if set_type != "test" else cls.LABELS[-1],
