@@ -406,7 +406,7 @@ class DDSRunner(JiantRunner):
 
         source_batch, source_batch_metadata = train_dataloader_dict[source_task_name].pop()
         source_batch = source_batch.to(self.device)
-        example_ids = source_batch_metadata["example_id"]
+        example_ids = source_batch_metadata["guid"] # use example_id as general instead of guid eventually
 
         ###########
         ###########
