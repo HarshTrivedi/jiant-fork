@@ -300,6 +300,7 @@ class DDSRunner(JiantRunner):
                  target_task,
                  output_dir,
                  target_optimization_choice,
+                 square_rewards,
                  aprx_eps: 1e-4,
                  **kwarg):
         super().__init__(**kwarg)
@@ -482,8 +483,10 @@ class DDSRunner(JiantRunner):
                                                               vector=target_grad,
                                                               start_optimizer_state_dict=previous_optimizer_state_dict)
 
-        hard_coded_rewards = [abs(int(example_id.split("-")[-1])-1) for example_id in example_ids]
-        aprx_rewards = torch.tensor(hard_coded_rewards, device=self.device)
+        # For diagnostics
+        # hard_coded_rewards = [abs(int(example_id.split("-")[-1])-1) for example_id in example_ids]
+        # aprx_rewards = torch.tensor(hard_coded_rewards, device=self.device)
+        # aprx_rewards = source_batch.to_dict()["label_id"]
 
         extras = {}
         if check_dot_approximation:
@@ -493,9 +496,10 @@ class DDSRunner(JiantRunner):
             extras["real_reward"] = real_rewards.item()
             extras["aprx_reward"] = aprx_rewards.item()
 
-        # rewards = source_batch.to_dict()['label_id'] # Diagnostic
-        # rewards = real_rewards # Another diagnostic for batch-size=1
-        rewards = aprx_rewards # Actually what we need
+        rewards = aprx_rewards
+
+        if self.square_rewards:
+            rewards = rewards**2
 
         rl_loss = self.jiant_model.dds_weights_forward( # TODO: 2nd call can be saved.
             batch=source_batch,
