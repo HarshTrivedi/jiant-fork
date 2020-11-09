@@ -326,12 +326,17 @@ class DDSRunner(JiantRunner):
             self,
             batch: tasks.BatchMixin,
             task: tasks.Task,
-            vector: List
+            vector: List,
+            start_optimizer_state_dict = None
         ):
         """
         See equation 7 of DDS paper: https://arxiv.org/pdf/1911.10088.pdf
         """
         # Reminder(Harsh): If I use fp16, eps will have to be changed.
+
+        if start_optimizer_state_dict is not None:
+            current_optimizer_state_dict = copy.deepcopy(self.optimizer_scheduler.optimizer.state_dict())
+            self.optimizer_scheduler.optimizer.load_state_dict(start_optimizer_state_dict)
 
         self.jiant_model.eval()
         with torch.no_grad():
@@ -380,6 +385,9 @@ class DDSRunner(JiantRunner):
 
         self.jiant_model.train()
 
+        if start_optimizer_state_dict is not None:
+            self.optimizer_scheduler.optimizer.load_state_dict(current_optimizer_state_dict)
+
         return vector_grad_dotproducts
 
 
@@ -419,6 +427,9 @@ class DDSRunner(JiantRunner):
 
         if check_dot_approximation:
             source_grad = self.optimizer_scheduler.get_shared_grad(copy=True, get_base=True)
+
+        previous_optimizer_state_dict = self.optimizer_scheduler.optimizer.state_dict()
+
         self.optimizer_scheduler.step()
         self.optimizer_scheduler.optimizer.zero_grad()
         ###########
@@ -466,7 +477,10 @@ class DDSRunner(JiantRunner):
         ###########
         rl_loss_val = 0
 
-        aprx_rewards = self.aproximate_vector_grad_dotproduct(batch=source_batch, task=source_task_name, vector=target_grad)
+        aprx_rewards = self.aproximate_vector_grad_dotproduct(batch=source_batch,
+                                                              task=source_task_name,
+                                                              vector=target_grad,
+                                                              start_optimizer_state_dict=previous_optimizer_state_dict)
 
         extras = {}
         if check_dot_approximation:
