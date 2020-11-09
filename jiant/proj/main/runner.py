@@ -399,7 +399,7 @@ class DDSRunner(JiantRunner):
             if source_task_name != self.target_task:
                 break
 
-        check_dot_approximation = True
+        check_dot_approximation = False
 
         task_specific_config = self.jiant_task_container.task_specific_configs[source_task_name]
         assert task_specific_config.gradient_accumulation_steps != 1, "Grad accum isn't supported for this setup."
