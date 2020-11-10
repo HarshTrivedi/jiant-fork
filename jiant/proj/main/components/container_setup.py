@@ -380,11 +380,12 @@ def create_jiant_task_container_from_args(args) -> JiantTaskContainer:
     elif args.sampler_type == "multidds_sampler":
         sampler_config = {
             "sampler_type": args.sampler_type,
-            "use_learner": args.multidds_use_learner,
+            "skip_learner": args.multidds_skip_learner,
             "sampler_lr": args.multidds_sampler_lr,
             "sampler_update_steps": args.multidds_sampler_update_steps,
             "sampler_force_skip_tasks": args.multidds_force_skip_tasks,
-            "queue_size": args.multidds_queue_size
+            "queue_size": args.multidds_queue_size,
+            "temperature": args.multidds_temperature
         }
     else:
         raise KeyError(args.sampler_type)
