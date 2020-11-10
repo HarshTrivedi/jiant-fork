@@ -101,6 +101,7 @@ class RunConfiguration(zconf.RunConfig):
     multidds_target_task = zconf.attr(default="", type=str)
     multidds_force_skip_tasks = zconf.attr(default="", type=str)
     multidds_queue_size = zconf.attr(type=int, default=500)
+    multidds_temperature = zconf.attr(type=float, default=0.1)
 
     grad_sim_metric = zconf.attr(default="cos", type=str)
     grad_sim_nonlinear = zconf.attr(default="")

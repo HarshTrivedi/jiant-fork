@@ -98,6 +98,7 @@ class MultiDDSSampler(BaseMultiTaskSampler):
         rng: Union[int, np.random.RandomState],
         skip_learner: bool = False,
         queue_size: int = None,
+        temperature: float = 0.1,
         sampler_lr: float = None,
         sampler_update_steps: int = None,
         sampler_force_skip_tasks: List = None
@@ -112,12 +113,12 @@ class MultiDDSSampler(BaseMultiTaskSampler):
 
         super().__init__(task_dict=task_dict, rng=rng)
         self.skip_learner = skip_learner
+        self.skip_tasks_mask = torch.BoolTensor([task_name in sampler_force_skip_tasks
+                                                 for task_name in self.task_dict])
         if not self.skip_learner:
             with torch.no_grad():
                 # start from uniform distribution
                 initial_weight = torch.FloatTensor([1.0 for k in self.task_dict])
-                self.skip_tasks_mask = torch.BoolTensor([task_name in sampler_force_skip_tasks
-                                                         for task_name in self.task_dict])
                 if torch.cuda.is_available():
                     initial_weight = initial_weight.cuda()
                     self.skip_tasks_mask = self.skip_tasks_mask.cuda()
@@ -129,6 +130,7 @@ class MultiDDSSampler(BaseMultiTaskSampler):
         else:
             self.list_of_queues = [[] for k in self.task_dict]
             self.queue_size = queue_size
+            self.temperature = temperature
 
         self.task_names = list(task_dict.keys())
 
@@ -139,7 +141,8 @@ class MultiDDSSampler(BaseMultiTaskSampler):
             task_scores = torch.tensor([sum(queue) / len(queue)
                                         if queue else 0.0
                                         for queue in self.list_of_queues])
-            return torch.softmax(task_scores, dim=0)
+            task_scores = task_scores.masked_fill(self.skip_tasks_mask, -float("Inf"))
+            return torch.softmax(task_scores/self.temperature, dim=0)
 
     def pop(self):
         task_name = self.rng.choice(self.task_names, p=self.task_p().detach().cpu().numpy())
@@ -279,9 +282,9 @@ def create_task_sampler(
         return MultiDDSSampler(
             task_dict=task_dict,
             rng=rng,
-            task_to_num_examples_dict=task_to_num_examples_dict,
             skip_learner=sampler_config["skip_learner"],
             sampler_lr=sampler_config["sampler_lr"],
+            temperature=sampler_config["temperature"],
             sampler_update_steps=sampler_config["sampler_update_steps"],
             sampler_force_skip_tasks=sampler_config["sampler_force_skip_tasks"],
             queue_size=sampler_config["queue_size"]
