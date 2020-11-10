@@ -96,43 +96,70 @@ class MultiDDSSampler(BaseMultiTaskSampler):
         self,
         task_dict: dict,
         rng: Union[int, np.random.RandomState],
-        task_to_num_examples_dict: dict,
-        sampler_lr: float,
-        sampler_update_steps: int,
-        sampler_force_skip_tasks: List
+        skip_learner: bool = False,
+        queue_size: int = None,
+        sampler_lr: float = None,
+        sampler_update_steps: int = None,
+        sampler_force_skip_tasks: List = None
     ):
+        if skip_learner:
+            assert queue_size is not None
+        else:
+            assert queue_size is not None
+            assert sampler_lr is not None
+            assert sampler_update_steps is not None
+            assert sampler_force_skip_tasks is not None
+
         super().__init__(task_dict=task_dict, rng=rng)
-        with torch.no_grad():
-            # start from uniform distribution
-            initial_weight = torch.FloatTensor([1.0 for k in self.task_dict])
-            self.skip_tasks_mask = torch.BoolTensor([task_name in sampler_force_skip_tasks
-                                                     for task_name in self.task_dict])
-            if torch.cuda.is_available():
-                initial_weight = initial_weight.cuda()
-                self.skip_tasks_mask = self.skip_tasks_mask.cuda()
-            initial_weight = initial_weight.masked_fill(self.skip_tasks_mask, -float("Inf"))
-            self.sampler_weight = initial_weight.detach()
-            self.sampler_weight.requires_grad = True
-        self.sampler_optimizer = torch.optim.Adam([self.sampler_weight], sampler_lr)
-        self.sampler_update_steps = sampler_update_steps
+        self.skip_learner = skip_learner
+        if not self.skip_learner:
+            with torch.no_grad():
+                # start from uniform distribution
+                initial_weight = torch.FloatTensor([1.0 for k in self.task_dict])
+                self.skip_tasks_mask = torch.BoolTensor([task_name in sampler_force_skip_tasks
+                                                         for task_name in self.task_dict])
+                if torch.cuda.is_available():
+                    initial_weight = initial_weight.cuda()
+                    self.skip_tasks_mask = self.skip_tasks_mask.cuda()
+                initial_weight = initial_weight.masked_fill(self.skip_tasks_mask, -float("Inf"))
+                self.sampler_weight = initial_weight.detach()
+                self.sampler_weight.requires_grad = True
+            self.sampler_optimizer = torch.optim.Adam([self.sampler_weight], sampler_lr)
+            self.sampler_update_steps = sampler_update_steps
+        else:
+            self.list_of_queues = [[] for k in self.task_dict]
+            self.queue_size = queue_size
 
         self.task_names = list(task_dict.keys())
 
     def task_p(self):
-        return torch.softmax(self.sampler_weight, dim=0)
+        if not self.skip_learner:
+            return torch.softmax(self.sampler_weight, dim=0)
+        else:
+            task_scores = torch.tensor([sum(queue) / len(queue)
+                                        if queue else 0.0
+                                        for queue in self.list_of_queues])
+            return torch.softmax(task_scores, dim=0)
 
     def pop(self):
         task_name = self.rng.choice(self.task_names, p=self.task_p().detach().cpu().numpy())
         return task_name, self.task_dict[task_name]
 
     def update_sampler(self, reward: torch.FloatTensor):
-        for step in range(self.sampler_update_steps):
-            rl_loss = -(self.task_p() * reward).mean()
-            rl_loss.backward()
-            self.sampler_optimizer.step()
-            self.sampler_optimizer.zero_grad()
-        # print(reward)
-        # print(self.task_p())
+        if not self.skip_learner:
+            for step in range(self.sampler_update_steps):
+                rl_loss = -(self.task_p() * reward).mean()
+                rl_loss.backward()
+                self.sampler_optimizer.step()
+                self.sampler_optimizer.zero_grad()
+            # print(reward)
+            # print(self.task_p())
+        else:
+            task_wise_rewards = [float(e) for e in reward.detach().cpu().numpy()]
+            for queue, reward in zip(self.list_of_queues, task_wise_rewards):
+                queue.append(reward)
+                if len(queue) > self.queue_size:
+                    queue.pop(0)
         return
 
 
@@ -249,14 +276,15 @@ def create_task_sampler(
             max_steps=sampler_config["max_steps"],
         )
     elif sampler_type == "multidds_sampler":
-        assert len(sampler_config) == 4
         return MultiDDSSampler(
             task_dict=task_dict,
             rng=rng,
             task_to_num_examples_dict=task_to_num_examples_dict,
+            skip_learner=sampler_config["skip_learner"],
             sampler_lr=sampler_config["sampler_lr"],
             sampler_update_steps=sampler_config["sampler_update_steps"],
-            sampler_force_skip_tasks=sampler_config["sampler_force_skip_tasks"]
+            sampler_force_skip_tasks=sampler_config["sampler_force_skip_tasks"],
+            queue_size=sampler_config["queue_size"]
         )
     else:
         raise KeyError(sampler_type)

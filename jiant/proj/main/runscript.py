@@ -95,12 +95,17 @@ class RunConfiguration(zconf.RunConfig):
     runner_type = zconf.attr(default="default", type=str)
     reptile_inner_steps = zconf.attr(default=5, type=int)
     reptile_num_sampled_tasks = zconf.attr(default=8, type=int)
+
+    multidds_skip_learner = zconf.attr(action="store_true")
     multidds_samper_update_freq = zconf.attr(default=1000, type=int)
     multidds_target_task = zconf.attr(default="", type=str)
+    multidds_force_skip_tasks = zconf.attr(default="", type=str)
+    multidds_queue_size = zconf.attr(type=int, default=500)
+
     grad_sim_metric = zconf.attr(default="cos", type=str)
     grad_sim_nonlinear = zconf.attr(default="")
     accumulate_target_grad = zconf.attr(action="store_true")
-    multidds_force_skip_tasks = zconf.attr(default="", type=str)
+
     dds_target_task = zconf.attr(default="", type=str)
     dds_target_optimization_choice = zconf.attr(default="", type=str)
     dds_square_rewards = zconf.attr(action="store_true")
