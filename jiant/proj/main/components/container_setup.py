@@ -378,12 +378,20 @@ def create_jiant_task_container_from_args(args) -> JiantTaskContainer:
             "max_steps": args.max_steps,
         }
     elif args.sampler_type == "multidds_sampler":
+        multidds_force_skip_tasks = (if args.multidds_force_skip_tasks
+                                     args.multidds_force_skip_tasks.split(",") else [])
+        fixed_sampling_task_prob = tuple()
+        if args.multidds_fixed_sampling_task_prob:
+            fixed_sampling_task_prob = args.multidds_fixed_sampling_task_prob.split(",")
+            fixed_sampling_task_prob[1] = float(fixed_sampling_task_prob[1])
+            fixed_sampling_task_prob = tuple(fixed_sampling_task_prob)
         sampler_config = {
             "sampler_type": args.sampler_type,
             "skip_learner": args.multidds_skip_learner,
             "sampler_lr": args.multidds_sampler_lr,
             "sampler_update_steps": args.multidds_sampler_update_steps,
-            "sampler_force_skip_tasks": args.multidds_force_skip_tasks,
+            "sampler_force_skip_tasks": multidds_force_skip_tasks,
+            "fixed_sampling_task_prob": fixed_sampling_task_prob,
             "queue_size": args.multidds_queue_size,
             "temperature": args.multidds_temperature
         }
