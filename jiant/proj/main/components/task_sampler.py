@@ -101,7 +101,8 @@ class MultiDDSSampler(BaseMultiTaskSampler):
         temperature: float = 0.1,
         sampler_lr: float = None,
         sampler_update_steps: int = None,
-        sampler_force_skip_tasks: List = None
+        sampler_force_skip_tasks: List = None,
+        fixed_sampling_task_prob: Tuple[str, float] = None # Todo: deprecate sampler_force_skip_tasks
     ):
         if skip_learner:
             assert queue_size is not None
@@ -115,6 +116,12 @@ class MultiDDSSampler(BaseMultiTaskSampler):
         self.skip_learner = skip_learner
         self.skip_tasks_mask = torch.BoolTensor([task_name in sampler_force_skip_tasks
                                                  for task_name in self.task_dict])
+        self.fixed_sampling_task_prob = fixed_sampling_task_prob
+        if self.fixed_sampling_task_prob is not None:
+            self.fixed_sampling_mask = torch.BoolTensor([task_name == fixed_sampling_task_prob[0]
+                                                         for task_name in self.task_dict])
+            self.fixed_sampling_prob = fixed_sampling_task_prob[1]
+
         if not self.skip_learner:
             with torch.no_grad():
                 # start from uniform distribution
@@ -122,6 +129,7 @@ class MultiDDSSampler(BaseMultiTaskSampler):
                 if torch.cuda.is_available():
                     initial_weight = initial_weight.cuda()
                     self.skip_tasks_mask = self.skip_tasks_mask.cuda()
+                    self.fixed_sampling_mask = self.fixed_sampling_mask.cuda()
                 initial_weight = initial_weight.masked_fill(self.skip_tasks_mask, -float("Inf"))
                 self.sampler_weight = initial_weight.detach()
                 self.sampler_weight.requires_grad = True
@@ -142,7 +150,11 @@ class MultiDDSSampler(BaseMultiTaskSampler):
                                         if queue else 0.0
                                         for queue in self.list_of_queues])
             task_scores = task_scores.masked_fill(self.skip_tasks_mask, -float("Inf"))
-            return torch.softmax(task_scores/self.temperature, dim=0)
+            task_probs = torch.softmax(task_scores/self.temperature, dim=0)
+            if self.fixed_sampling_task_prob is not None:
+                task_probs = task_probs*(1-self.fixed_sampling_prob)
+                task_probs.masked_fill(self.fixed_sampling_mask, self.fixed_sampling_prob)
+            return task_probs
 
     def pop(self):
         task_name = self.rng.choice(self.task_names, p=self.task_p().detach().cpu().numpy())
@@ -287,6 +299,7 @@ def create_task_sampler(
             temperature=sampler_config["temperature"],
             sampler_update_steps=sampler_config["sampler_update_steps"],
             sampler_force_skip_tasks=sampler_config["sampler_force_skip_tasks"],
+            fixed_sampling_task_prob=sampler_config["fixed_sampling_task_prob"],
             queue_size=sampler_config["queue_size"]
         )
     else:

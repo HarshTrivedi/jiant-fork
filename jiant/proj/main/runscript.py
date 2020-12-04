@@ -100,6 +100,7 @@ class RunConfiguration(zconf.RunConfig):
     multidds_samper_update_freq = zconf.attr(default=1000, type=int)
     multidds_target_task = zconf.attr(default="", type=str)
     multidds_force_skip_tasks = zconf.attr(default="", type=str)
+    fixed_sampling_task_prob = zconf.attr(default="", type=str)
     multidds_queue_size = zconf.attr(type=int, default=500)
     multidds_temperature = zconf.attr(type=float, default=0.1)
 
