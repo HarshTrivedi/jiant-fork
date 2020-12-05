@@ -119,7 +119,7 @@ class MultiDDSSampler(BaseMultiTaskSampler):
             self.skip_tasks_mask = torch.BoolTensor([task_name in sampler_force_skip_tasks
                                                      for task_name in self.task_dict])
         self.fixed_sampling_task_prob = fixed_sampling_task_prob
-        if self.fixed_sampling_task_prob is not None:
+        if self.fixed_sampling_task_prob:
             self.fixed_sampling_mask = torch.BoolTensor([task_name == fixed_sampling_task_prob[0]
                                                          for task_name in self.task_dict])
             self.fixed_sampling_prob = fixed_sampling_task_prob[1]
@@ -134,7 +134,8 @@ class MultiDDSSampler(BaseMultiTaskSampler):
                         self.skip_tasks_mask = self.skip_tasks_mask.cuda()
                     if self.fixed_sampling_task_prob:
                         self.fixed_sampling_mask = self.fixed_sampling_mask.cuda()
-                initial_weight = initial_weight.masked_fill(self.skip_tasks_mask, -float("Inf"))
+                if self.sampler_force_skip_tasks:
+                    initial_weight = initial_weight.masked_fill(self.skip_tasks_mask, -float("Inf"))
                 self.sampler_weight = initial_weight.detach()
                 self.sampler_weight.requires_grad = True
             self.sampler_optimizer = torch.optim.Adam([self.sampler_weight], sampler_lr)
