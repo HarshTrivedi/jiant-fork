@@ -4,7 +4,7 @@ import numpy as np
 import torch.nn as nn
 import torch
 
-from typing import Union, Optional, Dict, List
+from typing import Union, Optional, Dict, List, Tuple
 
 
 class BaseMultiTaskSampler(metaclass=abc.ABCMeta):
@@ -114,8 +114,10 @@ class MultiDDSSampler(BaseMultiTaskSampler):
 
         super().__init__(task_dict=task_dict, rng=rng)
         self.skip_learner = skip_learner
-        self.skip_tasks_mask = torch.BoolTensor([task_name in sampler_force_skip_tasks
-                                                 for task_name in self.task_dict])
+        self.sampler_force_skip_tasks = sampler_force_skip_tasks
+        if self.sampler_force_skip_tasks:
+            self.skip_tasks_mask = torch.BoolTensor([task_name in sampler_force_skip_tasks
+                                                     for task_name in self.task_dict])
         self.fixed_sampling_task_prob = fixed_sampling_task_prob
         if self.fixed_sampling_task_prob is not None:
             self.fixed_sampling_mask = torch.BoolTensor([task_name == fixed_sampling_task_prob[0]
@@ -128,8 +130,10 @@ class MultiDDSSampler(BaseMultiTaskSampler):
                 initial_weight = torch.FloatTensor([1.0 for k in self.task_dict])
                 if torch.cuda.is_available():
                     initial_weight = initial_weight.cuda()
-                    self.skip_tasks_mask = self.skip_tasks_mask.cuda()
-                    self.fixed_sampling_mask = self.fixed_sampling_mask.cuda()
+                    if self.sampler_force_skip_tasks:
+                        self.skip_tasks_mask = self.skip_tasks_mask.cuda()
+                    if self.fixed_sampling_task_prob:
+                        self.fixed_sampling_mask = self.fixed_sampling_mask.cuda()
                 initial_weight = initial_weight.masked_fill(self.skip_tasks_mask, -float("Inf"))
                 self.sampler_weight = initial_weight.detach()
                 self.sampler_weight.requires_grad = True
@@ -149,7 +153,8 @@ class MultiDDSSampler(BaseMultiTaskSampler):
             task_scores = torch.tensor([sum(queue) / len(queue)
                                         if queue else 0.0
                                         for queue in self.list_of_queues])
-            task_scores = task_scores.masked_fill(self.skip_tasks_mask, -float("Inf"))
+            if self.sampler_force_skip_tasks:
+                task_scores = task_scores.masked_fill(self.skip_tasks_mask, -float("Inf"))
             task_probs = torch.softmax(task_scores/self.temperature, dim=0)
             if self.fixed_sampling_task_prob is not None:
                 task_probs = task_probs*(1-self.fixed_sampling_prob)
