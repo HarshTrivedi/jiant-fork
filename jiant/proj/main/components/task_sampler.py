@@ -155,10 +155,12 @@ class MultiDDSSampler(BaseMultiTaskSampler):
                                         for queue in self.list_of_queues])
             if self.sampler_force_skip_tasks:
                 task_scores = task_scores.masked_fill(self.skip_tasks_mask, -float("Inf"))
+            if self.fixed_sampling_task_prob is not None:
+                task_scores = task_scores.masked_fill(self.fixed_sampling_mask, -float("Inf"))
             task_probs = torch.softmax(task_scores/self.temperature, dim=0)
             if self.fixed_sampling_task_prob is not None:
                 task_probs = task_probs*(1-self.fixed_sampling_prob)
-                task_probs.masked_fill(self.fixed_sampling_mask, self.fixed_sampling_prob)
+                task_probs = task_probs.masked_fill(self.fixed_sampling_mask, self.fixed_sampling_prob)
             return task_probs
 
     def pop(self):

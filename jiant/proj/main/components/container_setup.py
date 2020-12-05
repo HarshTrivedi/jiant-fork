@@ -382,7 +382,7 @@ def create_jiant_task_container_from_args(args) -> JiantTaskContainer:
                                      if args.multidds_force_skip_tasks else [])
         fixed_sampling_task_prob = tuple()
         if args.multidds_fixed_sampling_task_prob:
-            fixed_sampling_task_prob = args.multidds_fixed_sampling_task_prob.split(",")
+            fixed_sampling_task_prob = args.multidds_fixed_sampling_task_prob.split(":")
             fixed_sampling_task_prob[1] = float(fixed_sampling_task_prob[1])
             fixed_sampling_task_prob = tuple(fixed_sampling_task_prob)
         sampler_config = {
