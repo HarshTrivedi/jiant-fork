@@ -239,6 +239,7 @@ class JiantMetarunner(AbstractMetarunner):
         if self.best_val_state is None or val_state.score > self.best_val_state.score:
             self.best_val_state = val_state.new()
             self.log_writer.write_entry("train_val_best", self.best_val_state.to_dict())
+            del self.best_state_dict
             self.best_state_dict = copy_state_dict(
                 state_dict=get_model_for_saving(self.model).state_dict(), target_device=CPU_DEVICE,
             )
