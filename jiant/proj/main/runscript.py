@@ -280,7 +280,7 @@ def run_loop(args: RunConfiguration, checkpoint=None):
                 verbose=True,
                 save_best_model=args.do_save or args.do_save_best,
                 save_last_model=args.do_save or args.do_save_last,
-                load_best_model=False,
+                load_best_model=True,
                 log_writer=quick_init_out.log_writer,
             )
             if is_resumed:
@@ -299,11 +299,10 @@ def run_loop(args: RunConfiguration, checkpoint=None):
                 output_dir=args.output_dir,
                 verbose=True,
             )
-            if args.write_val_preds:
-                jiant_evaluate.write_preds(
-                    eval_results_dict=val_results_dict,
-                    path=os.path.join(args.output_dir, "val_preds.p"),
-                )
+            jiant_evaluate.write_preds(
+                eval_results_dict=val_results_dict,
+                path=os.path.join(args.output_dir, "val_preds.p"),
+            )
         else:
             assert not args.write_val_preds
 
