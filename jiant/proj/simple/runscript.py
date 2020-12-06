@@ -41,6 +41,8 @@ class RunConfiguration(zconf.RunConfig):
 
     # === Running Setup === #
     do_save = zconf.attr(action="store_true")
+    do_save_last = zconf.attr(action="store_true")
+    do_save_best = zconf.attr(action="store_true")
     write_val_preds = zconf.attr(action="store_true")
     write_test_preds = zconf.attr(action="store_true")
     eval_every_steps = zconf.attr(type=int, default=0)
@@ -207,6 +209,8 @@ def run_simple(args: RunConfiguration):
             do_train=bool(args.train_tasks),
             do_val=bool(args.val_tasks),
             do_save=args.do_save,
+            do_save_best=args.do_save_best,
+            do_save_last=args.do_save_last,
             write_val_preds=args.write_val_preds,
             write_test_preds=args.write_test_preds,
             eval_every_steps=args.eval_every_steps,
