@@ -299,10 +299,11 @@ def run_loop(args: RunConfiguration, checkpoint=None):
                 output_dir=args.output_dir,
                 verbose=True,
             )
-            jiant_evaluate.write_preds(
-                eval_results_dict=val_results_dict,
-                path=os.path.join(args.output_dir, "val_preds.p"),
-            )
+            if args.write_val_preds:
+                jiant_evaluate.write_preds(
+                    eval_results_dict=val_results_dict,
+                    path=os.path.join(args.output_dir, "val_preds.p"),
+                )
         else:
             assert not args.write_val_preds
 
