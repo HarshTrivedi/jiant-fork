@@ -107,10 +107,8 @@ class MultiDDSSampler(BaseMultiTaskSampler):
         if skip_learner:
             assert queue_size is not None
         else:
-            assert queue_size is not None
             assert sampler_lr is not None
             assert sampler_update_steps is not None
-            assert sampler_force_skip_tasks is not None
 
         super().__init__(task_dict=task_dict, rng=rng)
         self.skip_learner = skip_learner
